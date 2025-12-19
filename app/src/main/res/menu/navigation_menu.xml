@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_display"
+            android:title="Display" />
+            
+        <item
+            android:id="@+id/nav_input"
+            android:title="Input" />
+            
+        <item
+            android:id="@+id/nav_keyboard"
+            android:title="Keyboard" />
+            
+        <item
+            android:id="@+id/nav_touch"
+            android:title="Touch" />
+            
+        <item
+            android:id="@+id/nav_advanced"
+            android:title="Advanced" />
+    </group>
+    
+    <group android:id="@+id/action_group">
+        <item
+            android:id="@+id/nav_install_x11"
+            android:title="Install X11 Bridge" />
+            
+        <item
+            android:id="@+id/nav_select_controller"
+            android:title="Select Controller" />
+            
+        <item
+            android:id="@+id/nav_open_keyboard"
+            android:title="Open Keyboard" />
+            
+        <item
+            android:id="@+id/nav_process_manager"
+            android:title="Process Manager" />
+            
+        <item
+            android:id="@+id/nav_stop_desktop"
+            android:title="Stop Desktop" />
+    </group>
+    
+    <group android:id="@+id/bottom_group">
+        <item
+            android:id="@+id/nav_about"
+            android:title="About" />
+            
+        <item
+            android:id="@+id/nav_exit"
+            android:title="Exit" />
+    </group>
+</menu>

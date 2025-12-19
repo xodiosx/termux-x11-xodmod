@@ -17,7 +17,7 @@ import androidx.annotation.NonNull;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.x11.extrakeys.TermuxExtraKeysView;
 import com.termux.x11.MainActivity;
 import com.termux.x11.R;
 
@@ -49,21 +49,24 @@ public class X11ToolbarViewPager {
             LayoutInflater inflater = LayoutInflater.from(mActivity);
             View layout;
             if (position == 0) {
-                layout = inflater.inflate(R.layout.view_terminal_toolbar_extra_keys, collection, false);
-                ExtraKeysView extraKeysView = (ExtraKeysView) layout;
-                mActivity.mExtraKeys = new TermuxX11ExtraKeys(mEventListener, mActivity, extraKeysView);
-                extraKeysView.reload();
-                extraKeysView.setExtraKeysViewClient(mActivity.mExtraKeys);
-                extraKeysView.setOnHoverListener((v, e) -> true);
-                extraKeysView.setOnGenericMotionListener((v, e) -> true);
+                layout = inflater.inflate(R.layout.display_view_terminal_toolbar_extra_keys, collection, false);
+                TermuxExtraKeysView termuxExtraKeysView = (TermuxExtraKeysView) layout;
+                mActivity.mExtraKeys = new TermuxX11ExtraKeys(mEventListener, mActivity, termuxExtraKeysView);
+                int mTerminalToolbarDefaultHeight = mActivity.getDisplayTerminalToolbarViewPager().getLayoutParams().height;
+                int height = mTerminalToolbarDefaultHeight *
+                        ((mActivity.mExtraKeys.getExtraKeysInfo() == null) ? 0 : mActivity.mExtraKeys.getExtraKeysInfo().getMatrix().length);
+                termuxExtraKeysView.reload(mActivity.mExtraKeys.getExtraKeysInfo(), height);
+                termuxExtraKeysView.setExtraKeysViewClient(mActivity.mExtraKeys);
+                termuxExtraKeysView.setOnHoverListener((v, e) -> true);
+                termuxExtraKeysView.setOnGenericMotionListener((v, e) -> true);
             } else {
-                layout = inflater.inflate(R.layout.view_terminal_toolbar_text_input, collection, false);
-                final EditText editText = layout.findViewById(R.id.terminal_toolbar_text_input);
-                final Button back = layout.findViewById(R.id.terminal_toolbar_back_button);
+                layout = inflater.inflate(R.layout.display_view_terminal_toolbar_text_input, collection, false);
+                final EditText editText = layout.findViewById(R.id.display_terminal_toolbar_text_input);
+                final Button back = layout.findViewById(R.id.display_terminal_toolbar_back_button);
 
                 editText.setOnEditorActionListener((v, actionId, event) -> {
                     String textToSend = editText.getText().toString();
-                    if (textToSend.isEmpty()) textToSend = "\r";
+                    if (textToSend.length() == 0) textToSend = "\r";
                     KeyEvent e = new KeyEvent(0, textToSend, KeyCharacterMap.VIRTUAL_KEYBOARD, 0);
                     mEventListener.onKey(mActivity.getLorieView(), 0, e);
 
@@ -72,11 +75,11 @@ public class X11ToolbarViewPager {
                 });
 
                 editText.setOnCapturedPointerListener((v2, e2) -> {
-                    MainActivity.setCapturingEnabled(false);
+                    v2.releasePointerCapture();
                     return false;
                 });
 
-                back.setOnClickListener(v -> mActivity.getTerminalToolbarViewPager().setCurrentItem(0, true));
+                back.setOnClickListener(v -> mActivity.getDisplayTerminalToolbarViewPager().setCurrentItem(0, true));
                 back.setTextColor(0xFFFFFFFF);
                 back.setPadding(0, 0, 0, 0);
                 back.setBackground(new ColorDrawable(Color.BLACK) {
@@ -109,9 +112,11 @@ public class X11ToolbarViewPager {
         public void destroyItem(@NonNull ViewGroup collection, int position, @NonNull Object view) {
             collection.removeView((View) view);
         }
+
     }
 
     public static class OnPageChangeListener extends ViewPager.SimpleOnPageChangeListener {
+
         final MainActivity act;
         final ViewPager mTerminalToolbarViewPager;
 
@@ -125,7 +130,7 @@ public class X11ToolbarViewPager {
             if (position == 0) {
                 act.getLorieView().requestFocus();
             } else {
-                final EditText editText = mTerminalToolbarViewPager.findViewById(R.id.terminal_toolbar_text_input);
+                final EditText editText = mTerminalToolbarViewPager.findViewById(R.id.display_terminal_toolbar_text_input);
                 if (editText != null) editText.requestFocus();
             }
         }

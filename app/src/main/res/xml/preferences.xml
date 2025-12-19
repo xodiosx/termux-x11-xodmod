@@ -7,7 +7,9 @@
         <Preference app:title="@string/pref_pointer" app:fragment="pointer" />
         <Preference app:title="@string/pref_kbd" app:fragment="kbd" />
         <Preference app:title="@string/pref_other" app:fragment="other" />
-        <Preference app:key="version" app:title="@string/pref_version" />
+
+       
+    
     </PreferenceScreen>
     <PreferenceScreen app:key="output">
         <ListPreference app:key="displayResolutionMode" app:defaultValue="native" app:entries="@array/displayResolutionVariants" app:entryValues="@array/displayResolutionVariants"  />
@@ -15,10 +17,10 @@
         <ListPreference app:key="displayResolutionExact" app:defaultValue="1280x1024" app:entries="@array/displayResolution" app:entryValues="@array/displayResolution" tools:ignore="DuplicateSpeakableTextCheck" />
         <EditTextPreference app:key="displayResolutionCustom" app:defaultValue="1280x1024" app:useSimpleSummaryProvider="true" />
         <SwitchPreferenceCompat app:key="adjustResolution" app:defaultValue="false" />
-        <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="false" />
+        <SwitchPreferenceCompat app:key="displayStretch" app:defaultValue="true" />
         <SwitchPreferenceCompat app:key="Reseed" app:defaultValue="true" />
-        <SwitchPreferenceCompat app:key="PIP" app:defaultValue="false" />
-        <SwitchPreferenceCompat app:key="fullscreen" app:defaultValue="false" />
+        <SwitchPreferenceCompat app:key="PIP" app:defaultValue="true" />
+        <SwitchPreferenceCompat app:key="fullscreen" app:defaultValue="true" />
         <ListPreference app:key="forceOrientation" app:defaultValue="auto" app:entries="@array/forceOrientationVariants" app:entryValues="@array/forceOrientationVariants" />
         <SwitchPreferenceCompat app:key="hideCutout" app:defaultValue="false" />
         <SwitchPreferenceCompat app:defaultValue="true" app:key="keepScreenOn" />
@@ -30,17 +32,18 @@
         <SwitchPreferenceCompat app:key="stylusIsMouse" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="stylusButtonContactModifierMode" app:defaultValue="false" />
         <SwitchPreferenceCompat app:key="showMouseHelper" app:defaultValue="false" />
-        <SwitchPreferenceCompat app:key="pointerCapture" app:defaultValue="false" />
+        <SwitchPreferenceCompat app:key="pointerCapture" app:defaultValue="true" />
         <ListPreference app:key="transformCapturedPointer" app:defaultValue="no" app:entries="@array/transformCapturedPointerEntries" app:entryValues="@array/transformCapturedPointerValues" />
-        <SeekBarPreference app:key="capturedPointerSpeedFactor" app:defaultValue="100" app:min="1" android:max="300" app:seekBarIncrement="1" app:showSeekBarValue="true" app:updatesContinuously="true" />
+        <SeekBarPreference app:key="capturedPointerSpeedFactor" app:defaultValue="100" app:min="1" android:max="200" app:seekBarIncrement="1" app:showSeekBarValue="true" app:updatesContinuously="true" />
         <SwitchPreferenceCompat app:key="tapToMove" app:defaultValue="false" />
+        <SeekBarPreference app:defaultValue="1" app:key="touch_sensitivity" android:max="20" app:title="@string/touch_sensitivity" />
     </PreferenceScreen>
     <PreferenceScreen app:key="kbd">
-        <SwitchPreferenceCompat app:key="showAdditionalKbd" app:defaultValue="true" />
+        <SwitchPreferenceCompat app:key="showAdditionalKbd" app:defaultValue="false" />
         <!-- this preference should be a part of `Prefs` but should not appear in PreferenceScreen -->
         <SwitchPreferenceCompat app:key="additionalKbdVisible" app:defaultValue="true" app:isPreferenceVisible="false" />
         <SwitchPreferenceCompat app:key="showIMEWhileExternalConnected" app:defaultValue="true" />
-        <SwitchPreferenceCompat app:key="preferScancodes" app:defaultValue="false" />
+        <SwitchPreferenceCompat app:key="preferScancodes" app:defaultValue="true" />
         <SwitchPreferenceCompat app:key="hardwareKbdScancodesWorkaround" app:defaultValue="true" />
         <SwitchPreferenceCompat app:key="dexMetaKeyCapture" app:defaultValue="false" />
         <Preference app:key="enableAccessibilityService">
@@ -56,6 +59,12 @@
         <Preference app:key="requestNotificationPermission" />
         <Preference app:key="configureResponseToUserActions" app:fragment="userActions" />
         <SwitchPreferenceCompat app:key="storeSecondaryDisplayPreferencesSeparately" app:defaultValue="false" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="enableFloatBallMenu" app:summary="@string/enabl_float_ball_menu_notice" app:title="@string/enabl_float_ball_menu" />
+        <SwitchPreferenceCompat app:defaultValue="false" app:key="enableGlobalFloatBallMenu" app:title="@string/enable_global_float_ball_menu" />
+        <Preference app:key="open_keyboard" android:title="@string/open_keyboard" />
+
+      
+              <Preference app:key="version" app:title="5.9" />
     </PreferenceScreen>
     <PreferenceScreen app:key="ekbar">
         <SwitchPreferenceCompat app:key="adjustHeightForEK" app:defaultValue="false" />
@@ -68,7 +77,7 @@
         <ListPreference app:key="swipeDownAction" app:defaultValue="toggle additional key bar" app:entries="@array/userActionsValues" app:entryValues="@array/userActionsValues" />
         <ListPreference app:key="volumeUpAction" app:defaultValue="no action" app:entries="@array/userActionsVolumeUpValues" app:entryValues="@array/userActionsVolumeUpValues" />
         <ListPreference app:key="volumeDownAction" app:defaultValue="no action" app:entries="@array/userActionsVolumeDownValues" app:entryValues="@array/userActionsVolumeDownValues" />
-        <ListPreference app:key="backButtonAction" app:defaultValue="toggle soft keyboard" app:entries="@array/userActionsValues" app:entryValues="@array/userActionsValues" />
+<!--        <ListPreference app:key="backButtonAction" app:defaultValue="toggle soft keyboard" app:entries="@array/userActionsValues" app:entryValues="@array/userActionsValues" />-->
         <ListPreference app:key="notificationTapAction" app:defaultValue="open preferences" app:entries="@array/userActionsValues" app:entryValues="@array/userActionsValues" />
         <ListPreference app:key="notificationButton0Action" app:defaultValue="open preferences" app:entries="@array/userActionsValues" app:entryValues="@array/userActionsValues" />
         <ListPreference app:key="notificationButton1Action" app:defaultValue="exit" app:entries="@array/userActionsValues" app:entryValues="@array/userActionsValues" />

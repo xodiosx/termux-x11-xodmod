@@ -1,0 +1,117 @@
+<!DOCTYPE resources [
+    <!ENTITY TERMUX_PACKAGE_NAME "com.termux">
+    <!ENTITY TERMUX_APP_NAME "Termux">
+    <!ENTITY TERMUX_X11_APP_NAME "Termux:X11">
+    ]>
+<resources>
+    <string name="app_name">&TERMUX_X11_APP_NAME;</string>
+
+    <string name="not_connected">未連線</string>
+    <string name="preferences_button_text">   偏好設定   </string>
+    <string name="help_button_text">   說明   </string>
+    <string name="exit_button_text">   離開   </string>
+    <string name="extra_keys_config_desc">您可以在此處設定小鍵盤變數的值，就像在 Termux 應用程式中一樣（請閱讀<a href="http://wiki.termux.com/wiki/Touch_Keyboard#Extra_Keys_Row">此內容</a>）等等 \n
+例如<b>META</b> 代表 <i>META 鍵</i>, \n
+<b>KEYBOARD</b> 代表 <i>軟鍵盤切換鍵</i>, \n
+<b>PREFERENCES</b> 代表 <i>偏好設定開啟鍵</i>, \n
+<b>MOUSE_HELPER</b> 代表 <i>滑鼠協助程式切換鍵</i>, \n
+<b>STYLUS_HELPER</b> 代表 <i>手寫筆點擊覆蓋層切換鍵</i>, \n
+<b>EXIT</b> 代表 <i>應用程式離開鍵</i>。</string>
+    <string name="notification_content_text">下拉以顯示選項</string>
+    <string name="notification_open_preferences">偏好設定</string>
+    <string name="notification_exit">離開</string>
+    <string name="notification_restart_activity">重新啟動</string>
+    <string name="notification_toggle_soft_keyboard">切換輸入法</string>
+    <string name="notification_toggle_additional_key_bar">切換小鍵盤</string>
+    <string name="notification_release_pointer_and_keyboard_capture">釋放擷取</string>
+    <string name="notification_toggle_fullscreen">切換全螢幕</string>
+
+    <string name="pref_main">偏好設定</string>
+    <string name="pref_output">輸出</string>
+    <string name="pref_pointer">指標</string>
+    <string name="pref_kbd">鍵盤</string>
+    <string name="pref_other">其他</string>
+    <string name="pref_version">版本</string>
+    <string name="pref_ekbar">小鍵盤列偏好設定</string>
+    <string name="pref_userActions">對使用者動作的回應</string>
+
+    <string name="pref_displayResolutionMode">顯示解析度模式</string>
+    <string name="pref_displayScale">顯示比例, %</string>
+    <string name="pref_displayResolutionExact">顯示解析度</string>
+    <string name="pref_displayResolutionCustom">顯示解析度</string>
+    <string name="pref_adjustResolution">調整設定的解析度以符合螢幕方向</string>
+    <string name="pref_displayStretch">拉伸以符合顯示</string>
+    <string name="pref_Reseed">軟鍵盤開啟時重設螢幕</string>
+    <string name="pref_Reseed_summary">軟鍵盤開啟時將調整螢幕大小。</string>
+    <string name="pref_PIP">子母畫面模式</string>
+    <string name="pref_PIP_summary">按下主畫面按鈕或最近任務按鈕時，以子母畫面模式顯示應用程式</string>
+    <string name="pref_fullscreen">全螢幕</string>
+    <string name="pref_fullscreen_summary">在您的裝置顯示器上切換沉浸式模式</string>
+    <string name="pref_forceOrientation">螢幕方向</string>
+    <string name="pref_hideCutout">在異形螢幕上全螢幕顯示</string>
+    <string name="pref_keepScreenOn">保持螢幕常亮</string>
+
+    <string name="pref_touchMode">觸控螢幕輸入模式</string>
+    <string name="pref_scaleTouchpad">將顯示比例因子套用至觸控板</string>
+    <string name="pref_showStylusClickOverride">顯示手寫筆點擊選項</string>
+    <string name="pref_showStylusClickOverride_summary">手寫筆觸控覆寫、左、中或右鍵點擊（僅限手寫筆）</string>
+    <string name="pref_stylusIsMouse">啟用手寫筆滑鼠模式</string>
+    <string name="pref_stylusIsMouse_summary">讓您的手寫筆像滑鼠一樣運作。啟用後，手寫筆將只會移動游標並傳送滑鼠點擊，忽略壓力、角度和傾斜。</string>
+    <string name="pref_stylusButtonContactModifierMode">手寫筆按鈕接觸修飾符模式</string>
+    <string name="pref_stylusButtonContactModifierMode_summary">啟用此選項可在按下按鈕的同時手寫筆觸控螢幕時傳送右鍵或中鍵點擊。</string>
+    <string name="pref_showMouseHelper">顯示滑鼠點擊協助程式覆蓋層</string>
+    <string name="pref_showMouseHelper_summary">可與觸控板一起使用的螢幕滑鼠按鈕</string>
+    <string name="pref_pointerCapture">盡可能擷取外部指標裝置</string>
+    <string name="pref_pointerCapture_summary">攔截所有硬體指標事件。按下 Esc 鍵後指標返回到 Android。</string>
+    <string name="pref_transformCapturedPointer">轉換擷取的指標移動</string>
+    <string name="pref_capturedPointerSpeedFactor">擷取的指標速度因子, %</string>
+    <string name="pref_tapToMove">為觸控板啟用點擊移動</string>
+
+    <string name="pref_showAdditionalKbd">顯示小鍵盤</string>
+    <string name="pref_showAdditionalKbd_summary">顯示附有小按鍵的鍵盤。</string>
+    <string name="pref_showIMEWhileExternalConnected">連接外部鍵盤時顯示輸入法</string>
+    <string name="pref_showIMEWhileExternalConnected_summary">連接硬體鍵盤時顯示軟體鍵盤。</string>
+    <string name="pref_preferScancodes">盡可能偏好掃描碼</string>
+    <string name="pref_preferScancodes_summary">讓 X 伺服器處理硬體鍵盤配置（使用 DE 設定或 setxkbmap）。</string>
+    <string name="pref_hardwareKbdScancodesWorkaround">硬體鍵盤掃描碼解決方法</string>
+    <string name="pref_hardwareKbdScancodesWorkaround_summary">修正某些裝置上的掃描碼。可能會導致多個配置出現問題。</string>
+    <string name="pref_dexMetaKeyCapture">攔截系統快速鍵</string>
+    <string name="pref_dexMetaKeyCapture_summary">僅限三星 Dex。允許攔截「Alt+F4」、「Meta+D」、「Meta+E」等。</string>
+    <string name="pref_enableAccessibilityService">手動啟用無障礙服務以攔截系統快速鍵。</string>
+    <string name="pref_enableAccessibilityService_summary">開啟無障礙設定。</string>
+    <string name="pref_enableAccessibilityServiceAutomatically">自動啟用無障礙服務以攔截系統快速鍵。</string>
+    <string name="pref_enableAccessibilityServiceAutomatically_summary">需要 WRITE_SECURE_SETTINGS 權限。</string>
+    <string name="pref_pauseKeyInterceptingWithEsc">使用 Esc 鍵暫停按鍵攔截</string>
+    <string name="pref_filterOutWinkey">篩選掉被攔截的 Win (Meta/Mod4) 鍵。</string>
+    <string name="pref_filterOutWinkey_summary">允許您在攔截時使用 Dex 快速鍵。需要無障礙服務才能運作。</string>
+    <string name="pref_enforceCharBasedInput">強制執行基於字元的輸入</string>
+    <string name="pref_enforceCharBasedInput_summary">抑制建議、預測性輸入和中日韓語言</string>
+
+    <string name="pref_clipboardEnable">剪貼簿共用</string>
+    <string name="pref_requestNotificationPermission">要求通知權限</string>
+    <string name="pref_xrMode">Meta Oculus XR 模式</string>
+    <string name="pref_configureResponseToUserActions">設定對使用者動作的回應</string>
+    <string name="pref_storeSecondaryDisplayPreferencesSeparately">單獨儲存輔助顯示器的偏好設定</string>
+    <string name="pref_storeSecondaryDisplayPreferencesSeparately_summary">在要設定的顯示器上開啟此畫面</string>
+
+    <string name="pref_adjustHeightForEK">為小鍵盤列調整顯示高度</string>
+    <string name="pref_adjustHeightForEK_summary">切換小鍵盤列時可能會導致螢幕閃爍。</string>
+    <string name="pref_useTermuxEKBarBehaviour">每次按鍵後停用小鍵盤列上的特殊按鍵</string>
+    <string name="pref_useTermuxEKBarBehaviour_summary">使用長按鎖定特殊按鍵</string>
+    <string name="pref_opacityEKBar">小鍵盤列的不透明度, %</string>
+    <string name="pref_extra_keys_config">小鍵盤設定</string>
+
+    <string name="pref_swipeUpAction">三指向上滑動</string>
+    <string name="pref_swipeDownAction">三指向下滑動</string>
+    <string name="pref_volumeUpAction">音量增加</string>
+    <string name="pref_volumeDownAction">音量減少</string>
+    <string name="pref_backButtonAction">返回按鈕</string>
+    <string name="pref_notificationTapAction">通知點擊</string>
+    <string name="pref_notificationButton0Action">通知第一個按鈕</string>
+    <string name="pref_notificationButton1Action">通知第二個按鈕</string>
+    <string name="pref_mediaKeysAction">媒體鍵</string>
+
+    <string name="pref_summary_requiresExactOrCustom">需要將「顯示解析度模式」設定為「exact」或「custom」</string>
+    <string name="pref_summary_requiresIntercepting">需要使用 Dex 模式或無障礙服務攔截系統快速鍵</string>
+    <string name="pref_summary_requiresTrackpadAndNative">需要將「觸控螢幕輸入模式」設定為「Trackpad」且「顯示解析度模式」不為「native」</string>
+</resources>

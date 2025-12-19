@@ -19,6 +19,11 @@ import java.lang.ref.WeakReference;
  * Android gesture-detectors only detect taps/long-presses made with one finger.
  */
 public class TapGestureDetector {
+    private int longPressedDelay =1;
+
+    public void setLongPressedDelay(int longPressedDelay) {
+        this.longPressedDelay = longPressedDelay;
+    }
     /** The listener for receiving notifications of tap gestures. */
     public interface OnTapListener {
         /**
@@ -107,7 +112,7 @@ public class TapGestureDetector {
                 trackDownEvent(event);
 
                 // Cause a long-press notification to be triggered after the timeout.
-                mHandler.sendEmptyMessageDelayed(0, ViewConfiguration.getLongPressTimeout());
+                mHandler.sendEmptyMessageDelayed(0, ViewConfiguration.getLongPressTimeout()*longPressedDelay);
                 mPointerCount = 1;
                 break;
 

@@ -92,7 +92,7 @@ public interface InputStrategyInterface {
         private int mHeldButton = InputStub.BUTTON_UNDEFINED;
 
         public SimulatedTouchInputStrategy(
-                RenderData renderData, InputEventSender injector, Context context) {
+            RenderData renderData, InputEventSender injector, Context context) {
             if (injector == null)
                 throw new NullPointerException();
             mRenderData = renderData;

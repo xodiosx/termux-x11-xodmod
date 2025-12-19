@@ -48,7 +48,7 @@ public class SamsungDexUtils {
         try {
             Class<?> c = config.getClass();
             return c.getField("SEM_DESKTOP_MODE_ENABLED").getInt(c)
-                    == c.getField("semDesktopModeEnabled").getInt(config);
+                == c.getField("semDesktopModeEnabled").getInt(config);
         } catch (NoSuchFieldException | IllegalArgumentException | IllegalAccessException ignored) {}
         return false;
     }

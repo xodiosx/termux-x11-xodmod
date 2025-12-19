@@ -13,6 +13,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import android.graphics.PointF;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
+import android.view.View;
 
 import com.termux.x11.MainActivity;
 
@@ -65,7 +66,7 @@ public final class InputEventSender {
     }
 
     public void sendMouseDown(int button, boolean relative) {
-        if (!buttons.contains(button)) 
+        if (!buttons.contains(button))
             return;
         mInjector.sendMouseEvent(0, 0, button, true, relative);
     }
@@ -169,7 +170,7 @@ public final class InputEventSender {
         }
 
         boolean no_modifiers = (!e.isAltPressed() && !e.isCtrlPressed() && !e.isMetaPressed())
-                || ((e.getMetaState() & META_ALT_RIGHT_ON) != 0 && (e.getCharacters() != null || e.getUnicodeChar() != 0)); // For layouts with AltGr
+            || ((e.getMetaState() & META_ALT_RIGHT_ON) != 0 && (e.getCharacters() != null || e.getUnicodeChar() != 0)); // For layouts with AltGr
         // For Enter getUnicodeChar() returns 10 (line feed), but we still
         // want to send it as KeyEvent.
         char unicode = keyCode != KEYCODE_ENTER ? (char) e.getUnicodeChar() : 0;
@@ -199,10 +200,10 @@ public final class InputEventSender {
         // third-party keyboards that may still generate these events. See
         // https://source.android.com/devices/input/keyboard-devices.html#legacy-unsupported-keys
         char[][] chars = {
-                { KEYCODE_AT, '@', KEYCODE_2 },
-                { KEYCODE_POUND, '#', KEYCODE_3 },
-                { KEYCODE_STAR, '*', KEYCODE_8 },
-                { KEYCODE_PLUS, '+', KEYCODE_EQUALS }
+            { KEYCODE_AT, '@', KEYCODE_2 },
+            { KEYCODE_POUND, '#', KEYCODE_3 },
+            { KEYCODE_STAR, '*', KEYCODE_8 },
+            { KEYCODE_PLUS, '+', KEYCODE_EQUALS }
         };
 
         for (char[] i: chars) {
@@ -210,7 +211,7 @@ public final class InputEventSender {
                 continue;
 
             if ((e.getCharacters() != null && String.valueOf(i[1]).contentEquals(e.getCharacters()))
-                    || e.getUnicodeChar() == i[1]) {
+                || e.getUnicodeChar() == i[1]) {
                 mInjector.sendKeyEvent(0, KEYCODE_SHIFT_LEFT, pressed);
                 mInjector.sendKeyEvent(0, i[2], pressed);
                 return true;

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen 
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- Original Termux X11 Settings -->
+    <PreferenceCategory android:title="Settings">
+        <Preference
+            android:key="full_settings"
+            android:title="@string/notification_open_preferences"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:summary="Open x11 settings interface" />
+    </PreferenceCategory>
+
+    <!-- Quick Actions -->
+    <PreferenceCategory android:title="Quick Actions">
+        <Preference
+            android:key="open_keyboard"
+            android:title="@string/open_keyboard_btn"
+            android:icon="@android:drawable/ic_menu_set_as"
+            android:summary="Toggle software keyboard" />
+            
+        <Preference
+            android:key="select_controller"
+            android:title="@string/select_controller"
+            android:icon="@android:drawable/ic_menu_directions"
+            android:summary="@string/select_controller_summary" />
+            
+        
+
+            
+        <Preference
+            android:key="start_debug"
+            android:title="@string/log_level_debug"
+            android:icon="@android:drawable/ic_menu_info_details"
+            android:summary="Start debugging-logs saved to App's Data folder" />
+    </PreferenceCategory>
+
+    <!-- Info & Actions -->
+    <PreferenceCategory android:title="Information">
+        <Preference
+            android:key="help"
+            android:title="@string/help_button_text"
+            android:icon="@android:drawable/ic_menu_help"
+            android:summary="Open help GitHub" />
+            
+        <Preference
+            android:key="exit"
+            android:title="@string/exit_button_exit_app"
+            android:icon="@android:drawable/ic_menu_close_clear_cancel"
+            android:summary="Exit the application" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

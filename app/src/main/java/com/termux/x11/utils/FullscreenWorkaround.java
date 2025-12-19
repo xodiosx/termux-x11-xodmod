@@ -1,13 +1,12 @@
 package com.termux.x11.utils;
 
 import static android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN;
-
-import android.graphics.Rect;
-import android.widget.FrameLayout;
-import android.view.View;
-import android.app.Activity;
-
 import com.termux.x11.MainActivity;
+import android.app.Activity;
+import android.graphics.Rect;
+import android.view.View;
+import android.widget.FrameLayout;
+
 import com.termux.x11.Prefs;
 
 public class FullscreenWorkaround {
@@ -19,7 +18,16 @@ public class FullscreenWorkaround {
     }
 
     private final Activity mActivity;
+
     private int usableHeightPrevious;
+    private static boolean x11Focused = true;
+
+    public static void setX11Focused(boolean focused) {
+        x11Focused = focused;
+    }
+    public static boolean getX11Focused() {
+        return x11Focused;
+    }
 
     private FullscreenWorkaround(Activity activity) {
         mActivity = activity;
@@ -30,20 +38,22 @@ public class FullscreenWorkaround {
     private void possiblyResizeChildOfContent() {
         Prefs p = MainActivity.getPrefs();
         if (
-                !mActivity.hasWindowFocus() ||
+            !mActivity.hasWindowFocus() ||
                 !((mActivity.getWindow().getAttributes().flags & FLAG_FULLSCREEN) == FLAG_FULLSCREEN) ||
-                !p.Reseed.get() || !p.fullscreen.get() || SamsungDexUtils.checkDeXEnabled(mActivity)
+                !p.Reseed.get() ||
+                !x11Focused ||
+                !p.fullscreen.get() ||
+                SamsungDexUtils.checkDeXEnabled(mActivity)
         )
             return;
-
-        FrameLayout content = (FrameLayout)  ((FrameLayout) mActivity.findViewById(android.R.id.content)).getChildAt(0);
+        FrameLayout content = (FrameLayout) ((FrameLayout) mActivity.findViewById(android.R.id.content)).getChildAt(0);
         FrameLayout.LayoutParams frameLayoutParams = (FrameLayout.LayoutParams) content.getLayoutParams();
 
         int usableHeightNow = computeUsableHeight(content);
         if (usableHeightNow != usableHeightPrevious) {
             int usableHeightSansKeyboard = content.getRootView().getHeight();
             int heightDifference = usableHeightSansKeyboard - usableHeightNow;
-            if (heightDifference > (usableHeightSansKeyboard/4)) {
+            if (heightDifference > (usableHeightSansKeyboard / 4)) {
                 // keyboard probably just became visible
                 frameLayoutParams.height = usableHeightSansKeyboard - heightDifference;
             } else {

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_preferences"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:title="Preferences" />
+        
+        <item
+            android:id="@+id/nav_help"
+            android:icon="@android:drawable/ic_menu_help"
+            android:title="Help" />
+            
+        <item
+            android:id="@+id/nav_exit"
+            android:icon="@android:drawable/ic_menu_close_clear_cancel"
+            android:title="Exit" />
+    </group>
+    
+</menu>

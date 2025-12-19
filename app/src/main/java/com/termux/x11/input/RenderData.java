@@ -4,7 +4,6 @@
 
 package com.termux.x11.input;
 
-import android.graphics.Matrix;
 import android.graphics.PointF;
 
 /**
@@ -17,6 +16,8 @@ public class RenderData {
     public int screenHeight;
     public int imageWidth;
     public int imageHeight;
+    public int offsetX;
+    public int offsetY;
 
     /**
      * Specifies the position, in image coordinates, at which the cursor image will be drawn.
@@ -42,15 +43,14 @@ public class RenderData {
      */
     public boolean setCursorPosition(float newX, float newY) {
         boolean cursorMoved = false;
-        if (newX != mCursorPosition.x) {
-            mCursorPosition.x = newX;
+        if ((newX-offsetX) != mCursorPosition.x) {
+            mCursorPosition.x = newX-offsetX;
             cursorMoved = true;
         }
-        if (newY != mCursorPosition.y) {
-            mCursorPosition.y = newY;
+        if ((newY-offsetY) != mCursorPosition.y) {
+            mCursorPosition.y = newY-offsetY;
             cursorMoved = true;
         }
-
         return cursorMoved;
     }
 }

@@ -35,13 +35,13 @@ public class KeyInterceptor extends AccessibilityService {
             launchedAutomatically = true;
         } catch (SecurityException e) {
             new AlertDialog.Builder(ctx)
-                    .setTitle("Permission denied")
-                    .setMessage("Android requires WRITE_SECURE_SETTINGS permission to start accessibility service automatically.\n" +
-                            "Please, launch this command using ADB:\n" +
-                            "adb shell pm grant com.termux.x11 android.permission.WRITE_SECURE_SETTINGS")
-                    .setNegativeButton("OK", null)
-                    .create()
-                    .show();
+                .setTitle("Permission denied")
+                .setMessage("Android requires WRITE_SECURE_SETTINGS permission to start accessibility service automatically.\n" +
+                    "Please, launch this command using ADB:\n" +
+                    "adb shell pm grant com.termux.x11 android.permission.WRITE_SECURE_SETTINGS")
+                .setNegativeButton("OK", null)
+                .create()
+                .show();
 
             MainActivity.prefs.enableAccessibilityServiceAutomatically.put(false);
         }
@@ -105,10 +105,10 @@ public class KeyInterceptor extends AccessibilityService {
         if (intercept && event.getAction() == KeyEvent.ACTION_DOWN)
             pressedKeys.add(event.getKeyCode());
         else
-        // We should send key releases to activity for the case if user was pressing some keys when Activity lost focus.
-        // I.e. if user switched window with Win+Tab or if he was pressing Ctrl while switching activity.
-        if (event.getAction() == KeyEvent.ACTION_UP)
-            pressedKeys.remove(event.getKeyCode());
+            // We should send key releases to activity for the case if user was pressing some keys when Activity lost focus.
+            // I.e. if user switched window with Win+Tab or if he was pressing Ctrl while switching activity.
+            if (event.getAction() == KeyEvent.ACTION_UP)
+                pressedKeys.remove(event.getKeyCode());
 
         recheck();
 
