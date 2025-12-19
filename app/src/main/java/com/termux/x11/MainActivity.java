@@ -571,7 +571,7 @@ public void prepareToExit() {
     runOnUiThread(() -> {
         try {
             // 1. Stop any services first
-         //   stopDesktop();
+            stopDesktop();
             
             // 2. Cancel notification
             if (mNotificationManager != null) {
