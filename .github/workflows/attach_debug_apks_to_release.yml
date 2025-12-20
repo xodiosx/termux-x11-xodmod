@@ -31,13 +31,12 @@ jobs:
           java-version: 17
 
       - name: Read VERSION_NAME from gradle.properties
-        id: version
         shell: bash
         run: |
-          VERSION_NAME=$(./gradlew -q properties | grep "^VERSION_NAME:" | awk '{print $2}')
+          VERSION_NAME=$(grep -E '^VERSION_NAME=' gradle.properties | cut -d'=' -f2)
 
           if [ -z "$VERSION_NAME" ]; then
-            echo "::error::VERSION_NAME not found!"
+            echo "::error::VERSION_NAME not found in gradle.properties"
             exit 1
           fi
 
@@ -73,10 +72,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Read VERSION_NAME again
+      - name: Read VERSION_NAME from gradle.properties
         id: get_version
+        shell: bash
         run: |
-          VERSION_NAME=$(./gradlew -q properties | grep "^VERSION_NAME:" | awk '{print $2}')
+          VERSION_NAME=$(grep -E '^VERSION_NAME=' gradle.properties | cut -d'=' -f2)
           RELEASE_VERSION_NAME="v${VERSION_NAME}+${GITHUB_SHA:0:7}"
           echo "release_version=$RELEASE_VERSION_NAME" >> $GITHUB_OUTPUT
 
@@ -87,6 +87,7 @@ jobs:
 
       - name: Verify APKs
         run: |
+          echo "Downloaded APKs:"
           find artifacts -type f -name '*.apk' -print
 
       - name: Create GitHub Release
