@@ -35,7 +35,7 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-           <!--termux-x11-->
+   <!--termux-x11-->
         <activity
             android:name="com.termux.x11.controller.ControlsEditorActivity"
             android:exported="false"
@@ -53,6 +53,9 @@
             android:screenOrientation="sensor"
             android:theme="@style/AppTheme" />
 
+        <meta-data
+            android:name="android.allow_multiple_resumed_activities"
+            android:value="true" />
         <activity
             android:theme="@style/Theme.AppCompat.DayNight"
             android:excludeFromRecents="true"

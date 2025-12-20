@@ -1,59 +1,142 @@
-apply plugin: 'com.android.application'
-
+plugins {
+    id 'com.android.application'
+}
+configurations {
+    all*.exclude group: 'com.google.guava', module: 'listenablefuture'
+}
 android {
     namespace 'com.termux.x11'
-    //noinspection GrDeprecatedAPIUsage
-    compileSdkVersion 34
+    compileSdk 34
+
     defaultConfig {
-        applicationId "com.termux.x11"
-        minSdkVersion 26
-        targetSdkVersion 34
+        targetSdk 34
+        minSdk 26
         versionCode 15
         def commit= 'git rev-parse --verify --short HEAD'.execute().text.trim()
         def version = "1.03.01"
         versionName "${version}-${commit.length()==1?"nongit":commit}-${(new Date()).format("dd.MM.yy")}"
+        buildConfigField "String", "VERSION_NAME", "\"${versionName}\""
         buildConfigField "String", "COMMIT", "\"" + ("git rev-parse HEAD\n".execute().getText().trim() ?: (System.getenv('CURRENT_COMMIT') ?: "NO_COMMIT")) + "\""
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+        multiDexEnabled true
+        
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+            }
+        }
     }
 
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+if (true || isWindows()||isMacOS()){
+        sourceSets {
+            main {
+                jniLibs.srcDirs = ['libs']
+            }
+        }
+    }else{
+        externalNativeBuild {
+            cmake {
+                path "src/main/cpp/CMakeLists.txt"
+                version "3.22.1"
+            }
+        }
+    }
+    splits {
+        abi {
+            include  'arm64-v8a'
+            universalApk false
+        }
+    }
     signingConfigs.debug {
         storeFile file('testkey_untrusted.jks')
         keyAlias 'alias'
         storePassword 'xrj45yWGLbsO7W0v'
         keyPassword 'xrj45yWGLbsO7W0v'
     }
-
-    splits.abi {
-        enable true
-        reset()
-
-        include "x86", "x86_64", "armeabi-v7a", "arm64-v8a"
-        universalApk true
+    compileOptions {
+            // Enable support for the new language APIs[citation:1]
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_1_9
+        targetCompatibility JavaVersion.VERSION_1_9
     }
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+    buildFeatures {
+        viewBinding true
+    }
+  //  buildFeatures.aidl true
+ //   buildFeatures.buildConfig true
 
-    compileOptions.sourceCompatibility JavaVersion.VERSION_1_9
-    compileOptions.targetCompatibility JavaVersion.VERSION_1_9
-    externalNativeBuild.cmake.path "src/main/cpp/CMakeLists.txt"
+// externalNativeBuild.cmake.path "src/main/cpp/CMakeLists.txt"
     packagingOptions.jniLibs.useLegacyPackaging false
     buildFeatures.aidl true
     buildFeatures.buildConfig true
+
+    buildToolsVersion '34.0.0'
+  //  ndkVersion '25.1.8937393'
+    ndkVersion '27.1.12297006'
+    
     buildTypes.debug {
         signingConfig signingConfigs.debug
-        postprocessing {
-            removeUnusedCode true
-            removeUnusedResources true
-            obfuscate false
-            optimizeCode true
+    }
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
         }
     }
+    
 }
 
 dependencies {
-    //noinspection DifferentStdlibGradleVersion
-
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.21"
-    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0'
-    implementation 'androidx.preference:preference:1.2.1'
+   // implementation 'me.weishu:free_reflection:3.0.1'
+   implementation 'com.github.tiann:FreeReflection:3.2.2'
+    
+   coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.3'
+  implementation 'com.nineoldandroids:library:2.4.0'
+implementation "com.google.guava:guava:31.1-android"
+ // 
+      // implementation project(":terminal-view")
+    //    implementation project(":termux-shared")
+      //  implementation project(':float-ball')
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.23"
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation "androidx.core:core:1.6.0"
+    implementation 'androidx.preference:preference:1.1.1'
+    implementation 'com.google.android.material:material:1.9.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-livedata-ktx:2.6.1'
     compileOnly project(':shell-loader:stub')
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+
+    implementation 'com.google.android.material:material:1.4.0'
+    implementation 'com.github.luben:zstd-jni:1.5.2-3@aar'
+    implementation 'org.tukaani:xz:1.7'
+    implementation 'org.apache.commons:commons-compress:1.20'
+
+}
+
+static def isWindows() {
+    println(System.properties['os.name']);
+    return System.properties['os.name'].contains('windows');
+}
+
+static def isMacOS() {
+    println(System.properties['os.name']);
+    return System.properties['os.name'].contains('Mac OS X');
 }
 afterEvaluate {
     tasks.register("generatePrefs") {
