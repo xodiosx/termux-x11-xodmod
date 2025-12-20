@@ -98,7 +98,7 @@ jobs:
 
     - name: Update Nightly Release
       uses: andelf/nightly-release@main
-      if: github.repository == 'termux/termux-x11' && github.ref == 'refs/heads/master'
+      if: github.repository == 'xodiosx/termux-x11-xodmod' && github.ref == 'refs/heads/master'
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
