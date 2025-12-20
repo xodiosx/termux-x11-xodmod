@@ -1,5 +1,5 @@
 plugins {
-    id 'com.android.application'
+    id "com.android.application"
 }
 configurations {
     all*.exclude group: 'com.google.guava', module: 'listenablefuture'
