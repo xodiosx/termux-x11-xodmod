@@ -21,17 +21,14 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set up Java 17
+      - name: Make Gradle Wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
-
-      # ✅ Correct Gradle version for Android (NO wrapper)
-      - name: Setup Gradle (AGP compatible)
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.4
 
       - name: Read VERSION_NAME from gradle.properties
         shell: bash
@@ -57,7 +54,7 @@ jobs:
       - name: Build Debug APK
         run: |
           echo "Building APKs for $APK_VERSION_TAG"
-          gradle assembleDebug
+          ./gradlew assembleDebug
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
@@ -75,11 +72,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Gradle (AGP compatible)
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.4
-
       - name: Read VERSION_NAME from gradle.properties
         id: get_version
         shell: bash
@@ -95,7 +87,7 @@ jobs:
 
       - name: Verify APKs
         run: |
-          echo "Downloaded APK files:"
+          echo "Downloaded APKs:"
           find artifacts -type f -name '*.apk' -print
 
       - name: Create GitHub Release
@@ -104,6 +96,6 @@ jobs:
           tag_name: ${{ steps.get_version.outputs.release_version }}
           name: Release ${{ steps.get_version.outputs.release_version }}
           files: artifacts/**/*.apk
-          prerelease: true
           generate_release_notes: true
+          prerelease: true
           fail_on_unmatched_files: false
