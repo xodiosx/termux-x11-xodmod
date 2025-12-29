@@ -663,7 +663,9 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
    //     navigationView = findViewById(R.id.nav_view);
 lorieContentView = findViewById(R.id.id_display_window);
         frm = findViewById(R.id.frame);
-  
+
+        // debugging
+        LogcatLogger.start(this);
 // Set up the preferences button to open the drawer with settings
     
 
