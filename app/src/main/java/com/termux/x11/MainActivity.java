@@ -601,8 +601,8 @@ public void prepareToExit() {
             // 5. Exit process completely
             handler.postDelayed(() -> {
                
-          //      System.exit(0);
-         finish();
+             System.exit(0);
+          //   finish();
             }, 100);
             
         } catch (Exception e) {
@@ -981,11 +981,11 @@ lorieView.setOnHoverListener((v, e) -> {
 
         // Taken from Stackoverflow answer https://stackoverflow.com/questions/7417123/android-how-to-adjust-layout-in-full-screen-mode-when-softkeyboard-is-visible/7509285#
       //  FullscreenWorkaround.assistActivity(this);
-
+/*
 mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         mNotification = buildNotification();
         mNotificationManager.notify(mNotificationId, mNotification);
-
+*/
         if (tryConnect()) {
             final View content = findViewById(android.R.id.content);
             content.getViewTreeObserver().addOnPreDrawListener(mOnPredrawListener);
@@ -1383,8 +1383,8 @@ mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATI
     @Override
     public void onResume() {
         super.onResume();
-        mNotification = buildNotification();
-        mNotificationManager.notify(mNotificationId, mNotification);
+   //     mNotification = buildNotification();
+ //       mNotificationManager.notify(mNotificationId, mNotification);
 
         setTerminalToolbarView();
         getLorieView().requestFocus();
