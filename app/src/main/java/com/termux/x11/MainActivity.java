@@ -1,3 +1,4 @@
+
 package com.termux.x11;
 // Add these imports at the top with other imports
 import android.net.Uri;
@@ -438,7 +439,9 @@ return findViewById(R.id.display_terminal_toolbar_view_pager);
         @Override
         public void onExitApp() {
             // Exit the app
-            finishAffinity();
+            System.exit(0);
+         finish();
+       //     finishAffinity();
         }
     };
 }
@@ -529,6 +532,8 @@ private void showPreferencesInDrawer() {
     }
 }
 // Update onBackPressed to handle drawer navigation
+private long backPressedTime = 0;
+
 @Override
 public void onBackPressed() {
     if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
@@ -541,8 +546,6 @@ public void onBackPressed() {
         }, 100);
         
         // Remove fragment
-
-        
         FrameLayout prefContainer = findViewById(R.id.preferences_container);
         if (prefContainer != null) {
             prefContainer.removeAllViews();
@@ -558,11 +561,18 @@ public void onBackPressed() {
     drawerLayout.setDrawerLockMode(DrawerLayout.LOCK_MODE_UNLOCKED);
             showPreferencesInDrawer();
             drawerLayout.openDrawer(GravityCompat.START);
-        // If drawer is closed and locked, do normal back press
-     //   super.onBackPressed();
+        // Double tap to exit
+        if (backPressedTime + 2000 > System.currentTimeMillis()) {
+            //super.onBackPressed();
+
+
+            finish();
+        } else {
+            Toast.makeText(this, "Press back 2 times to exit", Toast.LENGTH_SHORT).show();
+        }
+        backPressedTime = System.currentTimeMillis();
     }
 }
-
 
 public void prepareToExit() {
     Log.d("MainActivity", "prepareToExit called from notification");
@@ -590,7 +600,9 @@ public void prepareToExit() {
             
             // 5. Exit process completely
             handler.postDelayed(() -> {
-                System.exit(0);
+               
+          //      System.exit(0);
+         finish();
             }, 100);
             
         } catch (Exception e) {
@@ -663,9 +675,7 @@ public boolean dispatchTouchEvent(MotionEvent ev) {
    //     navigationView = findViewById(R.id.nav_view);
 lorieContentView = findViewById(R.id.id_display_window);
         frm = findViewById(R.id.frame);
-
-        // debugging disable for performance boost can be enabled from the drawer 
-       // LogcatLogger.start(this);
+  
 // Set up the preferences button to open the drawer with settings
     
 
@@ -678,7 +688,13 @@ lorieContentView = findViewById(R.id.id_display_window);
         oldFullscreen = prefs.fullscreen.get();
         oldHideCutout = prefs.hideCutout.get();
 
-      
+        //  if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
+        // 
+      //  drawerLayout.closeDrawer(GravityCompat.START);
+        showPreferencesInDrawer();
+
+
+
 // Set up the preferences button to open the drawer
         findViewById(R.id.preferences_button).setOnClickListener(v -> {
         if (drawerLayout.isDrawerOpen(GravityCompat.START)) {
@@ -712,7 +728,7 @@ if (e.getDevice() == null) {
                         closeSoftKeyboard();
                     }
                     
-                    return true;
+                    return false;
                 }
                 
             }
@@ -1870,6 +1886,8 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
                 return true;
                 
             case "exit":
+          
+            System.exit(0);
                 activity.finish();
                 return true;
         }
