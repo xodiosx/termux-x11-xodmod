@@ -7,8 +7,7 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-   <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:allowBackup="false"
@@ -37,7 +36,7 @@
             </intent-filter>
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-   <!--termux-x11-->
+        <!--termux-x11-->
         <activity
             android:name="com.termux.x11.controller.ControlsEditorActivity"
             android:exported="false"
@@ -55,9 +54,11 @@
             android:screenOrientation="sensor"
             android:theme="@style/AppTheme" />
 
+        <!-- Only one meta-data entry for multiple resumed activities -->
         <meta-data
             android:name="android.allow_multiple_resumed_activities"
             android:value="true" />
+
         <activity
             android:theme="@style/Theme.AppCompat.DayNight"
             android:excludeFromRecents="true"
@@ -71,19 +72,22 @@
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
-	    <meta-data android:name="com.samsung.android.multidisplay.keep_process_alive" android:value="false"/>
-	    <meta-data android:name="android.allow_multiple_resumed_activities" android:value="true" />
-       <service android:name=".HudService"
-         android:enabled="true"
-         android:exported="false" />
 
-<service android:name=".HudService"
-         android:enabled="true"
-         android:exported="false"
-         android:foregroundServiceType="dataSync" />
+        <!-- Samsung multi-display keep alive -->
+        <meta-data
+            android:name="com.samsung.android.multidisplay.keep_process_alive"
+            android:value="false" />
 
+        <!-- HUD Service – single declaration -->
+        <service
+            android:name=".HudService"
+            android:enabled="true"
+            android:exported="false"
+            tools:targetApi="q" /> <!-- foregroundServiceType attribute omitted for broader compatibility; add if needed with tools:targetApi -->
 
-        <service android:name=".utils.KeyInterceptor"
+        <!-- KeyInterceptor accessibility service -->
+        <service
+            android:name=".utils.KeyInterceptor"
             android:exported="true"
             android:label="Termux:X11 KeyInterceptor"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
@@ -96,12 +100,18 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <receiver android:name=".LoriePreferences$Receiver" android:exported="true" tools:ignore="ExportedReceiver" android:enabled="true">
+        <!-- Broadcast receiver for preferences -->
+        <receiver
+            android:name=".LoriePreferences$Receiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver"
+            android:enabled="true">
             <intent-filter>
                 <action android:name="com.termux.x11.CHANGE_PREFERENCE" />
             </intent-filter>
         </receiver>
     </application>
+
     <queries>
         <package android:name="com.termux" />
     </queries>
