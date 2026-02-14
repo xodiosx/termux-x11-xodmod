@@ -102,7 +102,7 @@ public class HudService extends Service {
     private void startLogcatFpsThread() {
         new Thread(() -> {
             try {
-            //    Process p = Runtime.getRuntime().exec("logcat");
+            //    
            java.lang.Process p = Runtime.getRuntime().exec("logcat");
                 
                           BufferedReader br =
@@ -155,57 +155,43 @@ public class HudService extends Service {
     /* ===================== CPU USAGE ===================== */
 
     private String getCpuUsage() {
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("/proc/stat"));
-            String[] toks = br.readLine().split("\\s+");
-            br.close();
-
-            long user = Long.parseLong(toks[1]);
-            long nice = Long.parseLong(toks[2]);
-            long sys = Long.parseLong(toks[3]);
-            long idle = Long.parseLong(toks[4]);
-
-            long total = user + nice + sys + idle;
-            long diffIdle = idle - lastIdle;
-            long diffTotal = total - lastTotal;
-
-            lastIdle = idle;
-            lastTotal = total;
-
-            if (diffTotal == 0) return "CPU: N/A";
-
-            int usage = (int) (100 * (diffTotal - diffIdle) / diffTotal);
-            return "CPU: " + usage + "%";
-        } catch (Exception e) {
+    try (BufferedReader br = new BufferedReader(new FileReader("/proc/stat"))) {
+        String line = br.readLine();
+        if (line == null || !line.startsWith("cpu ")) {
             return "CPU: N/A";
         }
-    }
 
-    /* ===================== MEMORY ===================== */
+        String[] toks = line.split("\\s+");
+        long user = Long.parseLong(toks[1]);
+        long nice = Long.parseLong(toks[2]);
+        long system = Long.parseLong(toks[3]);
+        long idle = Long.parseLong(toks[4]);
+        long iowait = toks.length > 5 ? Long.parseLong(toks[5]) : 0;
+        long irq = toks.length > 6 ? Long.parseLong(toks[6]) : 0;
+        long softirq = toks.length > 7 ? Long.parseLong(toks[7]) : 0;
 
-    private String getMemoryInfo() {
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("/proc/meminfo"));
-            int total = 0, avail = 0;
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.startsWith("MemTotal:"))
-                    total = Integer.parseInt(line.split("\\s+")[1]);
-                else if (line.startsWith("MemAvailable:"))
-                    avail = Integer.parseInt(line.split("\\s+")[1]);
-            }
-            br.close();
+        long idleTime = idle + iowait;
+        long totalTime = user + nice + system + idle + iowait + irq + softirq;
 
-            return String.format(
-                    "MEM: %dMB / %dMB",
-                    (total - avail) / 1024,
-                    total / 1024
-            );
-        } catch (Exception e) {
-            return "MEM: N/A";
+        if (lastTotal == 0) {
+            lastTotal = totalTime;
+            lastIdle = idleTime;
+            return "CPU: ...";
         }
-    }
 
+        long deltaTotal = totalTime - lastTotal;
+        long deltaIdle = idleTime - lastIdle;
+
+        lastTotal = totalTime;
+        lastIdle = idleTime;
+
+        float usage = (deltaTotal - deltaIdle) * 100f / deltaTotal;
+        return String.format("CPU: %.1f%%", usage);
+
+    } catch (Exception e) {
+        return "CPU: N/A";
+    }
+}
     /* ===================== NOTIFICATION ===================== */
 
     private void createNotificationChannel() {
