@@ -192,6 +192,31 @@ public class HudService extends Service {
         return "CPU: N/A";
     }
 }
+    /* ===================== MEMORY ===================== */
+
+    private String getMemoryInfo() {
+        try {
+            BufferedReader br = new BufferedReader(new FileReader("/proc/meminfo"));
+            int total = 0, avail = 0;
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.startsWith("MemTotal:"))
+                    total = Integer.parseInt(line.split("\\s+")[1]);
+                else if (line.startsWith("MemAvailable:"))
+                    avail = Integer.parseInt(line.split("\\s+")[1]);
+            }
+            br.close();
+
+            return String.format(
+                    "MEM: %dMB / %dMB",
+                    (total - avail) / 1024,
+                    total / 1024
+            );
+        } catch (Exception e) {
+            return "MEM: N/A";
+        }
+    }
+
     /* ===================== NOTIFICATION ===================== */
 
     private void createNotificationChannel() {
