@@ -102,8 +102,10 @@ public class HudService extends Service {
     private void startLogcatFpsThread() {
         new Thread(() -> {
             try {
-                Process p = Runtime.getRuntime().exec("logcat");
-                BufferedReader br =
+            //    Process p = Runtime.getRuntime().exec("logcat");
+           java.lang.Process p = Runtime.getRuntime().exec("logcat");
+                
+                          BufferedReader br =
                         new BufferedReader(new InputStreamReader(p.getInputStream()));
 
                 Pattern pattern = Pattern.compile("(\\d+(\\.\\d+)?)\\s*FPS");
