@@ -8,11 +8,11 @@
         <Preference app:title="@string/pref_kbd" app:fragment="kbd" />
         <Preference app:title="@string/pref_other" app:fragment="other" />
 
-    <SwitchPreferenceCompat
-    android:key="enable_hud"
-    android:title="Enable HUD Overlay"
-    android:summary="Show system monitor overlay on X11"
-    android:defaultValue="false" />   
+<SwitchPreferenceCompat
+    app:key="enable_hud"
+    app:title="Enable HUD Overlay"
+    app:summary="Show system monitor overlay on X11"
+    app:defaultValue="false" />
     
     </PreferenceScreen>
     <PreferenceScreen app:key="output">
