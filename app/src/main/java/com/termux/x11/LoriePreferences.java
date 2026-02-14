@@ -501,6 +501,33 @@ if (actionBar != null) {
             return getResources().getIdentifier("pref_" + name, "string", getContext().getPackageName());
         }
 
+@Override
+public void onActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == REQUEST_OVERLAY_PERMISSION) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Settings.canDrawOverlays(requireContext())) {
+            // Permission granted, start service
+            SwitchPreferenceCompat hudPref = findPreference("enable_hud");
+            if (hudPref != null) {
+                hudPref.setChecked(true);
+                ContextCompat.startForegroundService(requireContext(), new Intent(requireContext(), HudService.class));
+            }
+        } else {
+            // Permission denied, revert switch
+            SwitchPreferenceCompat hudPref = findPreference("enable_hud");
+            if (hudPref != null) hudPref.setChecked(false);
+            Toast.makeText(requireContext(), "Overlay permission required for HUD", Toast.LENGTH_LONG).show();
+        }
+    }
+}
+
+private void requestOverlayPermission() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:" + requireContext().getPackageName()));
+    startActivityForResult(intent, REQUEST_OVERLAY_PERMISSION);
+}
+
         /**         * @noinspection DataFlowIssue         */
         @Override
         @SuppressLint("ApplySharedPref")
@@ -534,6 +561,33 @@ if (actionBar != null) {
                     list.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
                 }
             }
+
+//hud
+
+SwitchPreferenceCompat hudPref = findPreference("enable_hud");
+if (hudPref != null) {
+    hudPref.setOnPreferenceChangeListener((preference, newValue) -> {
+        boolean enabled = (Boolean) newValue;
+        Context context = getContext();
+        if (context == null) return false;
+
+        Intent intent = new Intent(context, HudService.class);
+        if (enabled) {
+            // Check overlay permission
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(context)) {
+                // Request permission (see step 5)
+                requestOverlayPermission();
+                return false; // Don't change preference yet
+            }
+            ContextCompat.startForegroundService(context, intent);
+        } else {
+            context.stopService(intent);
+        }
+        return true;
+    });
+}
+
+
 
          //   with("showAdditionalKbd", p -> p.setLayoutResource(R.layout.display_preference));
         with("showAdditionalKbd", p -> p.setLayoutResource(R.layout.preference));

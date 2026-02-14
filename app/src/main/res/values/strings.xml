@@ -478,5 +478,7 @@
     <string name="stop_desktop_btn">Stop Desktop</string>
     <string name="exit_btn">Exit</string>
 
+<string name="pref_enable_hud">Enable HUD Overlay</string>
+<string name="pref_enable_hud_summary">Show system monitor overlay on X11</string>
 
 </resources>
