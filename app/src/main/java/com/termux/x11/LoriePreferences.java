@@ -435,7 +435,7 @@ requestClosePreferencesDrawer();
         private static LoriePreferences loriePreferences;
 
         private final Runnable updateLayout = this::updatePreferencesLayout;
-        
+        private static final int REQUEST_OVERLAY_PERMISSION = 1001;
     /////////    
         
         private static final Method onSetInitialValue;
