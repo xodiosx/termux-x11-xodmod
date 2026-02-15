@@ -719,7 +719,7 @@ public boolean onGenericMotionEvent(MotionEvent event) {
         });
     }
 
-   }
+   
         getHolder().addCallback(mSurfaceCallback);
         clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
         nativeInit();
