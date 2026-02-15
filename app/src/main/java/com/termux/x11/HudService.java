@@ -1,5 +1,6 @@
 package com.termux.x11;
 
+import java.util.Locale;
 import android.app.*;
 import android.content.Intent;
 import android.graphics.*;
@@ -146,34 +147,25 @@ public class HudService extends Service {
 
     /* ===================== FPS (Improved) ===================== */
 
-    private void startLogcatFpsThread() {
-        new Thread(() -> {
+private void startLogcatFpsThread() {
+    new Thread(() -> {
+        while (true) {
+            float fps = LorieView.getCurrentFPS();
+            if (fps > 0) {
+                fpsValue = String.format(Locale.US, "%.1f", fps);
+            } else {
+                fpsValue = "N/A";
+            }
             try {
-                java.lang.Process p = Runtime.getRuntime().exec("logcat");
-                BufferedReader br =
-                        new BufferedReader(new InputStreamReader(p.getInputStream()));
+                Thread.sleep(500); // update twice per second
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+    }, "fps-reader-thread").start();
+}
 
-                // Match both "60 FPS" and "FPS: 60"
-                Pattern pattern = Pattern.compile(
-                        "(\\d+(\\.\\d+)?)\\s*FPS|FPS:\\s*(\\d+(\\.\\d+)?)",
-                        Pattern.CASE_INSENSITIVE
-                );
 
-                String line;
-                while ((line = br.readLine()) != null) {
-                    Matcher m = pattern.matcher(line);
-                    if (m.find()) {
-                        // The number may be in group 1 or group 3
-                        String val = m.group(1);
-                        if (val == null) val = m.group(3);
-                        if (val != null) {
-                            fpsValue = val;
-                        }
-                    }
-                }
-            } catch (Exception ignored) {}
-        }, "fps-logcat-thread").start();
-    }
 
     // Kept for compatibility – no longer affects FPS
     private void tickLogicalFps() {
