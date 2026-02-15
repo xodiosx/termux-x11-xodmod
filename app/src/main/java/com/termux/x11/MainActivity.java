@@ -1,8 +1,5 @@
-package com.termux.x11;
 
-import android.content.Intent;
-import android.provider.Settings;
-import androidx.core.content.ContextCompat;
+package com.termux.x11;
 // Add these imports at the top with other imports
 import android.net.Uri;
 import androidx.fragment.app.FragmentManager;
@@ -718,20 +715,7 @@ findViewById(R.id.exit_button).setOnClickListener((l) -> finish());
         int touch_sensitivity = preferences.getInt("touch_sensitivity", 1);
         mInputHandler.setLongPressedDelay(touch_sensitivity);
        mLorieKeyListener = (v, k, e) -> {
-// Check if HUD was enabled before
-if (prefs.enable_hud.get()) {
-    // Verify overlay permission (required for Android 6+)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-        // Permission missing – you can either:
-        // 1. Silently not start the HUD (user can enable via Settings later)
-        // 2. Show a dialog guiding the user to grant permission
-        Toast.makeText(this, "HUD: overlay permission required", Toast.LENGTH_LONG).show();
-    } else {
-        // Permission already granted or not needed – start service
-        Intent intent = new Intent(this, HudService.class);
-        ContextCompat.startForegroundService(this, intent);
-    }
-}
+
 ///////// fixing controller binding and support
 
 if (e.getDevice() == null) {
