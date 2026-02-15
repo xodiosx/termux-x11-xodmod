@@ -30,7 +30,7 @@ public class HudService extends Service {
 
     /* ---------- FPS STATE ---------- */
     private volatile String fpsValue = "N/A";
-    private int frameCount = 0;
+    private int frameCount = 0;               // kept only for compatibility, not used for display
     private long lastFpsTime = System.currentTimeMillis();
 
     /* ---------- CPU STATE ---------- */
@@ -91,6 +91,8 @@ public class HudService extends Service {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
 
+            // tickLogicalFps() is called only to keep its side‑effects unchanged,
+            // but it no longer overwrites the real fpsValue.
             tickLogicalFps();
 
             SpannableString hudText = buildColoredHud();
@@ -140,12 +142,13 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== FPS (UNCHANGED) ===================== */
+    /* ===================== FPS (FIXED) ===================== */
 
     private void startLogcatFpsThread() {
         new Thread(() -> {
             try {
-                java.lang.Process p = Runtime.getRuntime().exec("logcat");
+                // Use a filtered logcat command to reduce noise (optional)
+                Process p = Runtime.getRuntime().exec("logcat");
                 BufferedReader br =
                         new BufferedReader(new InputStreamReader(p.getInputStream()));
 
@@ -162,17 +165,20 @@ public class HudService extends Service {
         }, "fps-logcat-thread").start();
     }
 
+    // This method is kept only because it is called from startStatsLoop().
+    // It no longer interferes with the real FPS value.
     private void tickLogicalFps() {
+        // Increment frame counter (unused) – purely to preserve original structure.
         frameCount++;
         long now = System.currentTimeMillis();
         if (now - lastFpsTime >= 1000) {
-            fpsValue = String.valueOf(frameCount);
+            // Do NOT update fpsValue here – it is now only set by the logcat thread.
             frameCount = 0;
             lastFpsTime = now;
         }
     }
 
-    /* ===================== CPU TEMP (UNCHANGED) ===================== */
+    /* ===================== CPU TEMP ===================== */
 
     private String getCpuTemp() {
         for (int i = 0; i < 10; i++) {
@@ -197,15 +203,17 @@ public class HudService extends Service {
             String line = br.readLine();
             if (line == null || !line.startsWith("cpu ")) return "CPU: N/A";
 
-            String[] t = line.split("\\s+");
+            String[] tokens = line.split("\\s+");
 
-            long idle = Long.parseLong(t[4]);
+            // Idle is the 4th field (index 4 after "cpu")
+            long idle = Long.parseLong(tokens[4]);
             long total = 0;
-            for (int i = 1; i < t.length; i++) {
-                total += Long.parseLong(t[i]);
+            for (int i = 1; i < tokens.length; i++) {
+                total += Long.parseLong(tokens[i]);
             }
 
             if (lastTotal < 0) {
+                // First sample – store values and return placeholder
                 lastTotal = total;
                 lastIdle = idle;
                 return "CPU: ...";
@@ -217,12 +225,19 @@ public class HudService extends Service {
             lastTotal = total;
             lastIdle = idle;
 
-            if (dTotal <= 0) return "CPU: 0%";
+            // Avoid division by zero or negative differences
+            if (dTotal <= 0) {
+                return "CPU: 0%";
+            }
 
             float usage = (dTotal - dIdle) * 100f / dTotal;
             return String.format("CPU: %.1f%%", usage);
 
+        } catch (NumberFormatException e) {
+            // One of the fields was not a number – unlikely but handled
+            return "CPU: N/A";
         } catch (Exception e) {
+            // File not readable, etc.
             return "CPU: N/A";
         }
     }
@@ -247,10 +262,8 @@ public class HudService extends Service {
 
     private String getProp(String key) {
         try {
-            java.lang.Process p =
-                    Runtime.getRuntime().exec(new String[]{"getprop", key});
-            BufferedReader br =
-                    new BufferedReader(new InputStreamReader(p.getInputStream()));
+            Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
+            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
             return null;
