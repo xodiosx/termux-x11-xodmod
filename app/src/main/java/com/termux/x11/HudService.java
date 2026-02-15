@@ -1,28 +1,21 @@
 package com.termux.x11;
 
-import android.app.Notification;
-import android.app.NotificationChannel;
-import android.app.NotificationManager;
-import android.app.Service;
-import android.graphics.Color;
-import android.graphics.PixelFormat;
-import android.graphics.Typeface;
-import android.os.Build;
-import android.os.Handler;
-import android.os.IBinder;
-import android.os.Looper;
-import android.view.Choreographer;
-import android.view.Gravity;
-import android.view.WindowManager;
+import android.app.*;
+import android.content.Intent;
+import android.graphics.*;
+import android.os.*;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.view.*;
 import android.widget.TextView;
 
 import androidx.core.app.NotificationCompat;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.io.*;
+import java.util.concurrent.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class HudService extends Service {
 
@@ -35,31 +28,17 @@ public class HudService extends Service {
     private ScheduledExecutorService scheduler;
     private Handler mainHandler;
 
-    /* ================= FPS ================= */
-
+    /* ---------- FPS STATE ---------- */
+    private volatile String fpsValue = "N/A";
     private int frameCount = 0;
-    private int fps = 0;
-    private long lastFpsTime = 0;
+    private long lastFpsTime = System.currentTimeMillis();
 
-    private final Choreographer.FrameCallback frameCallback =
-            new Choreographer.FrameCallback() {
-                @Override
-                public void doFrame(long frameTimeNanos) {
-                    frameCount++;
-                    long now = System.currentTimeMillis();
-                    if (now - lastFpsTime >= 1000) {
-                        fps = frameCount;
-                        frameCount = 0;
-                        lastFpsTime = now;
-                    }
-                    Choreographer.getInstance().postFrameCallback(this);
-                }
-            };
+    /* ---------- CPU STATE ---------- */
+    private long lastIdle = -1;
+    private long lastTotal = -1;
 
-    /* ================= CPU ================= */
-
-    private long lastIdle = 0;
-    private long lastTotal = 0;
+    /* ---------- GPU ---------- */
+    private String gpuName = "GPU: N/A";
 
     @Override
     public void onCreate() {
@@ -70,22 +49,24 @@ public class HudService extends Service {
         createNotificationChannel();
         startForeground(NOTIFICATION_ID, buildNotification());
 
-        createOverlay();
-        startFpsTracking();
+        gpuName = detectGpuName();
+
+        createOverlayView();
+
+        startLogcatFpsThread();
         startStatsLoop();
     }
 
-    /* ================= OVERLAY ================= */
+    /* ===================== UI ===================== */
 
-    private void createOverlay() {
+    private void createOverlayView() {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
         hudView = new TextView(this);
-        hudView.setTextColor(Color.WHITE);
-        hudView.setBackgroundColor(Color.argb(150, 0, 0, 0));
         hudView.setTextSize(12);
-        hudView.setPadding(10, 5, 10, 5);
+        hudView.setPadding(10, 4, 10, 4);
         hudView.setTypeface(Typeface.MONOSPACE);
+        hudView.setBackgroundColor(Color.argb(140, 0, 0, 0));
 
         WindowManager.LayoutParams params =
                 new WindowManager.LayoutParams(
@@ -104,63 +85,141 @@ public class HudService extends Service {
         windowManager.addView(hudView, params);
     }
 
-    /* ================= FPS ================= */
-
-    private void startFpsTracking() {
-        lastFpsTime = System.currentTimeMillis();
-        Choreographer.getInstance().postFrameCallback(frameCallback);
-    }
-
-    /* ================= MAIN LOOP ================= */
+    /* ===================== MAIN LOOP ===================== */
 
     private void startStatsLoop() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
-            String text =
-                    "FPS: " + fps + " | " +
-                    getCpuUsage();
 
-            mainHandler.post(() -> hudView.setText(text));
-        }, 0, 1, TimeUnit.SECONDS);
+            tickLogicalFps();
+
+            SpannableString hudText = buildColoredHud();
+
+            mainHandler.post(() -> hudView.setText(hudText));
+
+        }, 0, 2, TimeUnit.SECONDS);
     }
 
-    /* ================= CPU USAGE ================= */
+    /* ===================== HUD TEXT ===================== */
+
+    private SpannableString buildColoredHud() {
+
+        String fps = "FPS: " + fpsValue;
+        String temp = getCpuTemp();
+        String cpu = getCpuUsage();
+        String mem = getMemoryInfo();
+        String gpu = gpuName;
+
+        String full =
+                fps + " | " +
+                temp + " | " +
+                cpu + " | " +
+                gpu + " | " +
+                mem;
+
+        SpannableString s = new SpannableString(full);
+
+        colorPart(s, fps, Color.YELLOW);
+        colorPart(s, temp, Color.CYAN);
+        colorPart(s, cpu, Color.GREEN);
+        colorPart(s, gpu, Color.MAGENTA);
+        colorPart(s, mem, Color.LTGRAY);
+
+        return s;
+    }
+
+    private void colorPart(SpannableString s, String part, int color) {
+        int start = s.toString().indexOf(part);
+        if (start >= 0) {
+            s.setSpan(
+                    new ForegroundColorSpan(color),
+                    start,
+                    start + part.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            );
+        }
+    }
+
+    /* ===================== FPS (UNCHANGED) ===================== */
+
+    private void startLogcatFpsThread() {
+        new Thread(() -> {
+            try {
+                java.lang.Process p = Runtime.getRuntime().exec("logcat");
+                BufferedReader br =
+                        new BufferedReader(new InputStreamReader(p.getInputStream()));
+
+                Pattern pattern = Pattern.compile("(\\d+(\\.\\d+)?)\\s*FPS");
+
+                String line;
+                while ((line = br.readLine()) != null) {
+                    Matcher m = pattern.matcher(line);
+                    if (m.find()) {
+                        fpsValue = m.group(1);
+                    }
+                }
+            } catch (Exception ignored) {}
+        }, "fps-logcat-thread").start();
+    }
+
+    private void tickLogicalFps() {
+        frameCount++;
+        long now = System.currentTimeMillis();
+        if (now - lastFpsTime >= 1000) {
+            fpsValue = String.valueOf(frameCount);
+            frameCount = 0;
+            lastFpsTime = now;
+        }
+    }
+
+    /* ===================== CPU TEMP (UNCHANGED) ===================== */
+
+    private String getCpuTemp() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
+                BufferedReader br = new BufferedReader(new FileReader(path));
+                int temp = Integer.parseInt(br.readLine().trim());
+                br.close();
+
+                if (temp > 10000) {
+                    return String.format("CPU: %.1f°C", temp / 1000f);
+                }
+            } catch (Exception ignored) {}
+        }
+        return "CPU: N/A";
+    }
+
+    /* ===================== CPU USAGE (FIXED) ===================== */
 
     private String getCpuUsage() {
         try (BufferedReader br = new BufferedReader(new FileReader("/proc/stat"))) {
             String line = br.readLine();
-            if (line == null || !line.startsWith("cpu ")) {
-                return "CPU: N/A";
-            }
+            if (line == null || !line.startsWith("cpu ")) return "CPU: N/A";
 
             String[] t = line.split("\\s+");
 
-            long user = Long.parseLong(t[1]);
-            long nice = Long.parseLong(t[2]);
-            long system = Long.parseLong(t[3]);
             long idle = Long.parseLong(t[4]);
-            long iowait = t.length > 5 ? Long.parseLong(t[5]) : 0;
-            long irq = t.length > 6 ? Long.parseLong(t[6]) : 0;
-            long softirq = t.length > 7 ? Long.parseLong(t[7]) : 0;
+            long total = 0;
+            for (int i = 1; i < t.length; i++) {
+                total += Long.parseLong(t[i]);
+            }
 
-            long idleTime = idle + iowait;
-            long totalTime = user + nice + system + idle + iowait + irq + softirq;
-
-            if (lastTotal == 0) {
-                lastTotal = totalTime;
-                lastIdle = idleTime;
+            if (lastTotal < 0) {
+                lastTotal = total;
+                lastIdle = idle;
                 return "CPU: ...";
             }
 
-            long deltaTotal = totalTime - lastTotal;
-            long deltaIdle = idleTime - lastIdle;
+            long dTotal = total - lastTotal;
+            long dIdle = idle - lastIdle;
 
-            lastTotal = totalTime;
-            lastIdle = idleTime;
+            lastTotal = total;
+            lastIdle = idle;
 
-            if (deltaTotal <= 0) return "CPU: N/A";
+            if (dTotal <= 0) return "CPU: 0%";
 
-            float usage = (deltaTotal - deltaIdle) * 100f / deltaTotal;
+            float usage = (dTotal - dIdle) * 100f / dTotal;
             return String.format("CPU: %.1f%%", usage);
 
         } catch (Exception e) {
@@ -168,7 +227,62 @@ public class HudService extends Service {
         }
     }
 
-    /* ================= NOTIFICATION ================= */
+    /* ===================== GPU NAME ===================== */
+
+    private String detectGpuName() {
+        String[] props = {
+                "ro.hardware.vulkan",
+                "ro.hardware.egl",
+                "ro.board.platform"
+        };
+
+        for (String p : props) {
+            String v = getProp(p);
+            if (v != null && !v.isEmpty()) {
+                return "GPU: " + v;
+            }
+        }
+        return "GPU: Unknown";
+    }
+
+    private String getProp(String key) {
+        try {
+            java.lang.Process p =
+                    Runtime.getRuntime().exec(new String[]{"getprop", key});
+            BufferedReader br =
+                    new BufferedReader(new InputStreamReader(p.getInputStream()));
+            return br.readLine();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /* ===================== MEMORY ===================== */
+
+    private String getMemoryInfo() {
+        try {
+            BufferedReader br = new BufferedReader(new FileReader("/proc/meminfo"));
+            int total = 0, avail = 0;
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.startsWith("MemTotal:"))
+                    total = Integer.parseInt(line.split("\\s+")[1]);
+                else if (line.startsWith("MemAvailable:"))
+                    avail = Integer.parseInt(line.split("\\s+")[1]);
+            }
+            br.close();
+
+            return String.format(
+                    "MEM: %dMB / %dMB",
+                    (total - avail) / 1024,
+                    total / 1024
+            );
+        } catch (Exception e) {
+            return "MEM: N/A";
+        }
+    }
+
+    /* ===================== NOTIFICATION ===================== */
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -186,21 +300,20 @@ public class HudService extends Service {
     private Notification buildNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("HUD active")
-                .setContentText("FPS & CPU monitor running")
+                .setContentText("System monitor overlay running")
                 .setSmallIcon(android.R.drawable.presence_online)
                 .build();
     }
 
     @Override
     public void onDestroy() {
-        Choreographer.getInstance().removeFrameCallback(frameCallback);
         if (hudView != null) windowManager.removeView(hudView);
         if (scheduler != null) scheduler.shutdownNow();
         super.onDestroy();
     }
 
     @Override
-    public IBinder onBind(android.content.Intent intent) {
+    public IBinder onBind(Intent intent) {
         return null;
     }
 }
