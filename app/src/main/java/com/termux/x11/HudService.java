@@ -148,7 +148,7 @@ public class HudService extends Service {
         new Thread(() -> {
             try {
                 // Use a filtered logcat command to reduce noise (optional)
-                Process p = Runtime.getRuntime().exec("logcat");
+                java.lang.Process p = Runtime.getRuntime().exec("logcat");
                 BufferedReader br =
                         new BufferedReader(new InputStreamReader(p.getInputStream()));
 
@@ -262,7 +262,7 @@ public class HudService extends Service {
 
     private String getProp(String key) {
         try {
-            Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
+            java.lang.Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
             BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
