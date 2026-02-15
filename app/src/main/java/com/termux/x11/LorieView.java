@@ -705,9 +705,9 @@ public boolean onGenericMotionEvent(MotionEvent event) {
 
     // NEW: Accurate FPS counting for Android 7.0+ (API 24+)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        addOnFrameMetricsAvailableListener(new View.OnFrameMetricsAvailableListener() {
+        addOnFrameMetricsAvailableListener(new android.view.View.OnFrameMetricsAvailableListener() {
             @Override
-            public void onFrameMetricsAvailable(View view, FrameMetrics frameMetrics, int dropCount) {
+            public void onFrameMetricsAvailable(android.view.View view, FrameMetrics frameMetrics, int dropCount) {
                 onFrameRendered(); // called for every presented frame
             }
         }, new Handler(Looper.getMainLooper()));
