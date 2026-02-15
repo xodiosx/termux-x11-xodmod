@@ -71,11 +71,10 @@ import java.util.regex.PatternSyntaxException;
 
 import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
-// Add these imports at the top if not already present
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.FrameMetrics;
-
+import android.view.View;
 
 
 
@@ -364,11 +363,31 @@ public class LorieView extends SurfaceView implements InputStub {
         return winHandler;
     }
 
+
 private static volatile float currentFPS = 0f;
 private static int frameCount = 0;
 private static long lastFPSTime = 0;
 private static final Object fpsLock = new Object();
 
+public static void onFrameRendered() {
+    synchronized (fpsLock) {
+        long now = SystemClock.elapsedRealtime();
+        if (lastFPSTime == 0) {
+            lastFPSTime = now;
+        }
+        frameCount++;
+        long delta = now - lastFPSTime;
+        if (delta >= 500) { // update twice per second
+            currentFPS = frameCount * 1000f / delta;
+            frameCount = 0;
+            lastFPSTime = now;
+        }
+    }
+}
+
+public static float getCurrentFPS() {
+    return currentFPS;
+}
 
 // In LorieView.java
 
@@ -679,40 +698,19 @@ public boolean onGenericMotionEvent(MotionEvent event) {
         super(context, attrs, defStyleAttr, defStyleRes);
         init();
     }
-    
-    public static void onFrameRendered() {
-    synchronized (fpsLock) {
-        long now = SystemClock.elapsedRealtime();
-        if (lastFPSTime == 0) {
-            lastFPSTime = now;
-        }
-        frameCount++;
-        long delta = now - lastFPSTime;
-        if (delta >= 500) { // update twice per second
-            currentFPS = frameCount * 1000f / delta;
-            frameCount = 0;
-            lastFPSTime = now;
-        }
-    }
-}
-
-// Public getter for HudService
-public static float getCurrentFPS() {
-    return currentFPS;
-}
-
-    
 
     private void init() {
+    
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        addOnFrameMetricsAvailableListener(new SurfaceView.OnFrameMetricsAvailableListener() {
+        addOnFrameMetricsAvailableListener(new View.OnFrameMetricsAvailableListener() {
             @Override
-            public void onFrameMetricsAvailable(SurfaceView surfaceView, FrameMetrics frameMetrics, int i) {
-                // This is called for every frame presented
+            public void onFrameMetricsAvailable(View view, FrameMetrics frameMetrics, int dropCount) {
                 onFrameRendered();
             }
         }, new Handler(Looper.getMainLooper()));
     }
+
     
         getHolder().addCallback(mSurfaceCallback);
         clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
