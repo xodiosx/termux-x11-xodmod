@@ -69,16 +69,13 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.regex.PatternSyntaxException;
 
-import dalvik.annotation.optimization.CriticalNative;
-import dalvik.annotation.optimization.FastNative;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.FrameMetrics;
 import android.view.View;
 
-
-
-
+import dalvik.annotation.optimization.CriticalNative;
+import dalvik.annotation.optimization.FastNative;
 class InputConnectionWrapper implements InputConnection {
     private static final String TAG = "InputConnectionWrapper";
     private final InputConnection wrapped;
@@ -355,15 +352,6 @@ public class LorieView extends SurfaceView implements InputStub {
     public CursorLocker cursorLocker;
     public WinHandler winHandler;
 
-    public void setWinHandler(WinHandler handler) {
-        this.winHandler = handler;
-    }
-
-    public WinHandler getWinHandler() {
-        return winHandler;
-    }
-
-
 private static volatile float currentFPS = 0f;
 private static int frameCount = 0;
 private static long lastFPSTime = 0;
@@ -388,6 +376,16 @@ public static void onFrameRendered() {
 public static float getCurrentFPS() {
     return currentFPS;
 }
+    public void setWinHandler(WinHandler handler) {
+        this.winHandler = handler;
+    }
+
+    public WinHandler getWinHandler() {
+        return winHandler;
+    }
+
+
+
 
 // In LorieView.java
 
@@ -709,9 +707,19 @@ public boolean onGenericMotionEvent(MotionEvent event) {
                 onFrameRendered();
             }
         }, new Handler(Looper.getMainLooper()));
+    } else {
+        // Optional fallback for older APIs (Choreographer) – but note: it may report 60 FPS even when rendering is slower.
+        // We'll still use it so the FPS value isn't completely missing.
+        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                onFrameRendered();
+                Choreographer.getInstance().postFrameCallback(this);
+            }
+        });
     }
 
-    
+   }
         getHolder().addCallback(mSurfaceCallback);
         clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
         nativeInit();
