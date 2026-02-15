@@ -30,7 +30,7 @@ public class HudService extends Service {
 
     /* ---------- FPS STATE ---------- */
     private volatile String fpsValue = "N/A";
-    private int frameCount = 0;               // kept only for compatibility, not used for display
+    private int frameCount = 0;               // kept only for compatibility
     private long lastFpsTime = System.currentTimeMillis();
 
     /* ---------- CPU STATE ---------- */
@@ -39,6 +39,9 @@ public class HudService extends Service {
 
     /* ---------- GPU ---------- */
     private String gpuName = "GPU: N/A";
+
+    /* ---------- MEMORY (Winlator style) ---------- */
+    private String totalRAM = null;
 
     @Override
     public void onCreate() {
@@ -50,6 +53,7 @@ public class HudService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification());
 
         gpuName = detectGpuName();
+        totalRAM = getTotalRAM();
 
         createOverlayView();
 
@@ -91,9 +95,7 @@ public class HudService extends Service {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
 
-            // tickLogicalFps() is called only to keep its side‑effects unchanged,
-            // but it no longer overwrites the real fpsValue.
-            tickLogicalFps();
+            tickLogicalFps();                 // kept for compatibility (does nothing now)
 
             SpannableString hudText = buildColoredHud();
 
@@ -109,7 +111,7 @@ public class HudService extends Service {
         String fps = "FPS: " + fpsValue;
         String temp = getCpuTemp();
         String cpu = getCpuUsage();
-        String mem = getMemoryInfo();
+        String mem = getMemoryInfo();         // now uses ActivityManager
         String gpu = gpuName;
 
         String full =
@@ -142,37 +144,42 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== FPS (FIXED) ===================== */
+    /* ===================== FPS (Improved) ===================== */
 
     private void startLogcatFpsThread() {
         new Thread(() -> {
             try {
-                // Use a filtered logcat command to reduce noise (optional)
                 java.lang.Process p = Runtime.getRuntime().exec("logcat");
                 BufferedReader br =
                         new BufferedReader(new InputStreamReader(p.getInputStream()));
 
-                Pattern pattern = Pattern.compile("(\\d+(\\.\\d+)?)\\s*FPS");
+                // Match both "60 FPS" and "FPS: 60"
+                Pattern pattern = Pattern.compile(
+                        "(\\d+(\\.\\d+)?)\\s*FPS|FPS:\\s*(\\d+(\\.\\d+)?)",
+                        Pattern.CASE_INSENSITIVE
+                );
 
                 String line;
                 while ((line = br.readLine()) != null) {
                     Matcher m = pattern.matcher(line);
                     if (m.find()) {
-                        fpsValue = m.group(1);
+                        // The number may be in group 1 or group 3
+                        String val = m.group(1);
+                        if (val == null) val = m.group(3);
+                        if (val != null) {
+                            fpsValue = val;
+                        }
                     }
                 }
             } catch (Exception ignored) {}
         }, "fps-logcat-thread").start();
     }
 
-    // This method is kept only because it is called from startStatsLoop().
-    // It no longer interferes with the real FPS value.
+    // Kept for compatibility – no longer affects FPS
     private void tickLogicalFps() {
-        // Increment frame counter (unused) – purely to preserve original structure.
         frameCount++;
         long now = System.currentTimeMillis();
         if (now - lastFpsTime >= 1000) {
-            // Do NOT update fpsValue here – it is now only set by the logcat thread.
             frameCount = 0;
             lastFpsTime = now;
         }
@@ -196,7 +203,7 @@ public class HudService extends Service {
         return "CPU: N/A";
     }
 
-    /* ===================== CPU USAGE (FIXED) ===================== */
+    /* ===================== CPU USAGE (More robust) ===================== */
 
     private String getCpuUsage() {
         try (BufferedReader br = new BufferedReader(new FileReader("/proc/stat"))) {
@@ -205,7 +212,6 @@ public class HudService extends Service {
 
             String[] tokens = line.split("\\s+");
 
-            // Idle is the 4th field (index 4 after "cpu")
             long idle = Long.parseLong(tokens[4]);
             long total = 0;
             for (int i = 1; i < tokens.length; i++) {
@@ -213,7 +219,7 @@ public class HudService extends Service {
             }
 
             if (lastTotal < 0) {
-                // First sample – store values and return placeholder
+                // First sample
                 lastTotal = total;
                 lastIdle = idle;
                 return "CPU: ...";
@@ -225,7 +231,6 @@ public class HudService extends Service {
             lastTotal = total;
             lastIdle = idle;
 
-            // Avoid division by zero or negative differences
             if (dTotal <= 0) {
                 return "CPU: 0%";
             }
@@ -233,11 +238,10 @@ public class HudService extends Service {
             float usage = (dTotal - dIdle) * 100f / dTotal;
             return String.format("CPU: %.1f%%", usage);
 
-        } catch (NumberFormatException e) {
-            // One of the fields was not a number – unlikely but handled
-            return "CPU: N/A";
         } catch (Exception e) {
-            // File not readable, etc.
+            // If anything fails, reset so next attempt can start fresh
+            lastTotal = -1;
+            lastIdle = -1;
             return "CPU: N/A";
         }
     }
@@ -270,29 +274,33 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== MEMORY ===================== */
+    /* ===================== MEMORY (Winlator style) ===================== */
+
+    private String getTotalRAM() {
+        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memoryInfo);
+        return formatBytes(memoryInfo.totalMem);
+    }
+
+    private String getAvailableRAM() {
+        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(memoryInfo);
+        long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
+        return formatBytes(usedMem);
+    }
+
+    private String formatBytes(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        int exp = (int) (Math.log(bytes) / Math.log(1024));
+        String pre = "KMGTPE".charAt(exp-1) + "";
+        return String.format(Locale.US, "%.1f %sB", bytes / Math.pow(1024, exp), pre);
+    }
 
     private String getMemoryInfo() {
-        try {
-            BufferedReader br = new BufferedReader(new FileReader("/proc/meminfo"));
-            int total = 0, avail = 0;
-            String line;
-            while ((line = br.readLine()) != null) {
-                if (line.startsWith("MemTotal:"))
-                    total = Integer.parseInt(line.split("\\s+")[1]);
-                else if (line.startsWith("MemAvailable:"))
-                    avail = Integer.parseInt(line.split("\\s+")[1]);
-            }
-            br.close();
-
-            return String.format(
-                    "MEM: %dMB / %dMB",
-                    (total - avail) / 1024,
-                    total / 1024
-            );
-        } catch (Exception e) {
-            return "MEM: N/A";
-        }
+        if (totalRAM == null) totalRAM = getTotalRAM();
+        return "MEM: " + getAvailableRAM() + " / " + totalRAM;
     }
 
     /* ===================== NOTIFICATION ===================== */
