@@ -72,10 +72,8 @@ import java.util.regex.PatternSyntaxException;
 import android.os.Build;
 import android.os.SystemClock;
 import android.view.Choreographer;
-// The next two are only needed if you want the more accurate FrameMetrics (API 24+)
 import android.view.FrameMetrics;
 import android.view.View;
-
 
 import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
@@ -355,11 +353,6 @@ public class LorieView extends SurfaceView implements InputStub {
     public CursorLocker cursorLocker;
     public WinHandler winHandler;
 
-private static volatile float currentFPS = 0f;
-private static int frameCount = 0;
-private static long lastFPSTime = 0;
-private static final Object fpsLock = new Object();
-
     public void setWinHandler(WinHandler handler) {
         this.winHandler = handler;
     }
@@ -368,13 +361,15 @@ private static final Object fpsLock = new Object();
         return winHandler;
     }
 
+private static volatile float currentFPS = 0f;
+private static int frameCount = 0;
+private static long lastFPSTime = 0;
+private static final Object fpsLock = new Object();
 
 public static void onFrameRendered() {
     synchronized (fpsLock) {
         long now = SystemClock.elapsedRealtime();
-        if (lastFPSTime == 0) {
-            lastFPSTime = now;
-        }
+        if (lastFPSTime == 0) lastFPSTime = now;
         frameCount++;
         long delta = now - lastFPSTime;
         if (delta >= 500) { // update twice per second
@@ -388,6 +383,7 @@ public static void onFrameRendered() {
 public static float getCurrentFPS() {
     return currentFPS;
 }
+
 
 // In LorieView.java
 
@@ -700,25 +696,32 @@ public boolean onGenericMotionEvent(MotionEvent event) {
     }
 
     private void init() {
-    
-   
-    Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
-        @Override
-        public void doFrame(long frameTimeNanos) {
-            onFrameRendered();
-            Choreographer.getInstance().postFrameCallback(this);
-        }
-    });
+    // Existing code – keep all of it
+    getHolder().addCallback(mSurfaceCallback);
+    clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+    nativeInit();
+    screenInfo = new ScreenInfo(this);
+    cursorLocker = new CursorLocker(this);
 
-
-    
-        getHolder().addCallback(mSurfaceCallback);
-        clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-        nativeInit();
-        screenInfo = new ScreenInfo(this);
-        cursorLocker = new CursorLocker(this);
+    // NEW: Accurate FPS counting for Android 7.0+ (API 24+)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        addOnFrameMetricsAvailableListener(new View.OnFrameMetricsAvailableListener() {
+            @Override
+            public void onFrameMetricsAvailable(View view, FrameMetrics frameMetrics, int dropCount) {
+                onFrameRendered(); // called for every presented frame
+            }
+        }, new Handler(Looper.getMainLooper()));
+    } else {
+        // Fallback for older Android versions (uses vsync, may show 60 FPS even when slower)
+        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
+            @Override
+            public void doFrame(long frameTimeNanos) {
+                onFrameRendered();
+                Choreographer.getInstance().postFrameCallback(this);
+            }
+        });
     }
-
+}
     public void setCallback(Callback callback) {
         mCallback = callback;
         triggerCallback();
