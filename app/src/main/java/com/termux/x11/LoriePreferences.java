@@ -287,6 +287,22 @@ private void showSettingsUI() {
         if (LoriePreferenceFragment.loriePreferences == null) {
            LoriePreferenceFragment.loriePreferences = this;
         }
+        
+         // Start HUD service if the preference is enabled and we have overlay permission
+    if (prefs != null) {
+        // The generated field name is likely "enable_hud" (matches the XML key)
+        Boolean enabled = prefs.enable_hud != null ? prefs.enable_hud.get() : false;
+        if (enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                // Permission missing – do nothing; the preference will stay true but the service won't run.
+                // Optionally you could show a notification or request permission here.
+            } else {
+                Intent intent = new Intent(this, HudService.class);
+                ContextCompat.startForegroundService(this, intent);
+            }
+        }
+    }
+        
     }
     
     // Add this method to launch settings
