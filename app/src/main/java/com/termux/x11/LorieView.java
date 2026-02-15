@@ -696,23 +696,22 @@ public boolean onGenericMotionEvent(MotionEvent event) {
     }
 
     private void init() {
-    // Existing code – keep all of it
     getHolder().addCallback(mSurfaceCallback);
     clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
     nativeInit();
     screenInfo = new ScreenInfo(this);
     cursorLocker = new CursorLocker(this);
 
-    // NEW: Accurate FPS counting for Android 7.0+ (API 24+)
+    Activity activity = getActivity();
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        addOnFrameMetricsAvailableListener(new android.view.View.OnFrameMetricsAvailableListener() {
-            @Override
-            public void onFrameMetricsAvailable(android.view.View view, FrameMetrics frameMetrics, int dropCount) {
-                onFrameRendered(); // called for every presented frame
-            }
-        }, new Handler(Looper.getMainLooper()));
+        activity.getWindow().addOnFrameMetricsAvailableListener(
+            (window, frameMetrics, dropCount) -> {
+                onFrameRendered();
+            },
+            new Handler(Looper.getMainLooper())
+        );
     } else {
-        // Fallback for older Android versions (uses vsync, may show 60 FPS even when slower)
         Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
             @Override
             public void doFrame(long frameTimeNanos) {
@@ -721,8 +720,10 @@ public boolean onGenericMotionEvent(MotionEvent event) {
             }
         });
     }
-}
-    public void setCallback(Callback callback) {
+}  
+
+
+ public void setCallback(Callback callback) {
         mCallback = callback;
         triggerCallback();
     }
