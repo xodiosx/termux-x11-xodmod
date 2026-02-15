@@ -1,5 +1,7 @@
-
 package com.termux.x11;
+
+import android.content.Intent;
+import android.provider.Settings;
 // Add these imports at the top with other imports
 import android.net.Uri;
 import androidx.fragment.app.FragmentManager;
