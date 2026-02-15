@@ -166,7 +166,6 @@ private void startLogcatFpsThread() {
 }
 
 
-
     // Kept for compatibility – no longer affects FPS
     private void tickLogicalFps() {
         frameCount++;
