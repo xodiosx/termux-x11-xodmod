@@ -1,5 +1,6 @@
 package com.termux.x11;
 
+import java.util.Locale;
 import android.app.*;
 import android.content.Intent;
 import android.graphics.*;
