@@ -10,7 +10,7 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.view.*;
 import android.widget.TextView;
-
+import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import java.io.*;
@@ -161,7 +161,9 @@ public class HudService extends Service {
             String line;
             while (fpsReaderRunning && (line = reader.readLine()) != null) {
                 // Example: "02-16 17:45:28.796 I LorieNative: 34 frames in 5.0 seconds = 6.8 FPS"
-                if (line.contains("LorieNative") && line.contains("FPS")) {
+              Log.d("HudService", "logcat line: " + line);   // <-- add this
+                
+                    if (line.contains("LorieNative") && line.contains("FPS")) {
                     int idx = line.lastIndexOf('=');
                     if (idx != -1) {
                         String afterEq = line.substring(idx + 1).trim();
