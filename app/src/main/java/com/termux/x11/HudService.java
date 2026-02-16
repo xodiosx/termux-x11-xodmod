@@ -23,7 +23,7 @@ public class HudService extends Service {
 
     private static final String CHANNEL_ID = "hud_channel";
     private static final int NOTIFICATION_ID = 1;
-    private static final String TAG = "HudService"; // for debug logs
+    private static final String TAG = "HudService";
 
     private WindowManager windowManager;
     private TextView hudView;
@@ -46,7 +46,7 @@ public class HudService extends Service {
     /* ---------- MEMORY ---------- */
     private String totalRAM = null;
 
-    // For writing FPS lines to file (like LogcatLogger)
+    // For writing FPS lines to a file (exactly like LogcatLogger)
     private FileWriter fpsFileWriter;
 
     @Override
@@ -63,10 +63,10 @@ public class HudService extends Service {
 
         createOverlayView();
 
-        // Prepare the FPS log file (optional, for debugging)
+        // Prepare the FPS log file in the same way as LogcatLogger
         prepareFpsLogFile();
 
-        startFpsReaderThread();      // now uses the improved method
+        startFpsReaderThread();      // now identical to LogcatLogger's method
         startStatsLoop();
     }
 
@@ -167,36 +167,37 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== IMPROVED FPS READER (like LogcatLogger) ===================== */
+    /* ===================== FPS READER (EXACTLY LIKE LogcatLogger) ===================== */
 
     private void startFpsReaderThread() {
         fpsReaderRunning = true;
         fpsReaderThread = new Thread(() -> {
-            Process process = null;
+            // Use fully qualified name to avoid conflict with android.os.Process
+            java.lang.Process process = null;
             BufferedReader reader = null;
 
             try {
-                // 1. Clear old logs (same as LogcatLogger)
+                // Step 1: Clear old logs (same as LogcatLogger)
                 Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
 
-                // 2. Start logcat with the correct filter and time format
-                //    Command: logcat -v time -s LorieNative:I
-                String[] cmd = new String[]{"logcat", "-v", "time", "-s", "LorieNative:I"};
+                // Step 2: Start logcat with time format (same as LogcatLogger)
+                // Command: logcat -v time
+                String[] cmd = new String[]{"logcat", "-v", "time"};
                 process = Runtime.getRuntime().exec(cmd);
 
-                // 3. Read the output stream
+                // Step 3: Read the output stream
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                 Log.d(TAG, "FPS reader thread started, reading lines...");
 
                 String line;
                 while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                    // Log every line for debugging (you can comment this out later)
+                    // Log every line for debugging (optional)
                     Log.d(TAG, "logcat line: " + line);
 
-                    // Check if this line contains our FPS information
+                    // Look for lines containing both "LorieNative" and "FPS"
                     if (line.contains("LorieNative") && line.contains("FPS")) {
-                        // Write to file for verification
+                        // Write to file (exactly like LogcatLogger does)
                         writeFpsLineToFile(line);
 
                         // Parse the FPS value
@@ -215,9 +216,13 @@ public class HudService extends Service {
                 Log.e(TAG, "Error in FPS reader thread", e);
                 fpsValue = "FPS: error";
             } finally {
-                // Close resources
-                if (reader != null) try { reader.close(); } catch (IOException ignored) {}
-                if (process != null) process.destroy();
+                // Clean up resources
+                if (reader != null) {
+                    try { reader.close(); } catch (IOException ignored) {}
+                }
+                if (process != null) {
+                    process.destroy();
+                }
                 // Close file writer
                 if (fpsFileWriter != null) {
                     try { fpsFileWriter.close(); } catch (IOException ignored) {}
