@@ -1835,6 +1835,14 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
                 p.setOnPreferenceChangeListener(this);
             }
         }
+
+        // Sync HUD switch with actual service state (optional)
+        SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
+        if (hudSwitch != null) {
+            // You could check if HudService is running and set the switch accordingly
+            // This requires a way to query the service, e.g., a static boolean in HudService
+            // hudSwitch.setChecked(HudService.isRunning());
+        }
     }
 
     @Override
@@ -1894,30 +1902,31 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
         if (key == null) return false;
 
         switch (key) {
-            case "hud_enable":
+            case "hud_enabled":   // must match the key in XML
                 boolean enable = (Boolean) newValue;
                 if (enable) {
                     startHudService();
                 } else {
                     stopHudService();
                 }
-                return true; // accept the change
+                // Return true to accept the change (the switch will update)
+                return true;
         }
         return false;
     }
 
     private void startHudService() {
-        // Check for overlay permission on Android M+
+        // Check overlay permission on Android M+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
             // Request permission
             Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
                     Uri.parse("package:" + activity.getPackageName()));
-            activity.startActivityForResult(intent, 1001); // You'll need to handle the result in MainActivity
+            activity.startActivityForResult(intent, 1001);
 
             // Revert the switch state because permission not granted
-            SwitchPreferenceCompat switchPref = findPreference("hud_enable");
-            if (switchPref != null) {
-                switchPref.setChecked(false);
+            SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
+            if (hudSwitch != null) {
+                hudSwitch.setChecked(false);
             }
 
             Toast.makeText(activity, "Please grant overlay permission", Toast.LENGTH_LONG).show();
@@ -1958,4 +1967,5 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
         return onPreferenceClick(preference);
     }
 }
+
 }

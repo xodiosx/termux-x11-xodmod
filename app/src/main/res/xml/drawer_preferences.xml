@@ -27,10 +27,11 @@
             android:summary="@string/select_controller_summary" />
             
         <SwitchPreferenceCompat
-    app:key="enable_hud"
-    app:title="Enable HUD Overlay"
-    app:summary="Show system monitor overlay on X11"
-    app:defaultValue="false" />
+    android:key="hud_enabled"
+    android:title="Enable performance HUD"
+    android:summary="Show FPS, CPU, memory overlay"
+    android:defaultValue="false"
+    app:iconSpaceReserved="false" />
 
             
         <Preference
