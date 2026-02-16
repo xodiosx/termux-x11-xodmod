@@ -170,69 +170,102 @@ public class HudService extends Service {
     /* ===================== FPS READER (EXACTLY LIKE LogcatLogger) ===================== */
 
     private void startFpsReaderThread() {
-        fpsReaderRunning = true;
-        fpsReaderThread = new Thread(() -> {
-            // Use fully qualified name to avoid conflict with android.os.Process
-            java.lang.Process process = null;
-            BufferedReader reader = null;
+    fpsReaderRunning = true;
+    fpsReaderThread = new Thread(() -> {
+        java.lang.Process process = null;
+        BufferedReader reader = null;
+        String grepPath = findGrepPath(); // check for grep binary
 
-            try {
-                // Step 1: Clear old logs (same as LogcatLogger)
-                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
+        try {
+            // Clear logcat buffer (optional, helps start fresh)
+            Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
+//logcat | grep --line-buffered "FPS"
+            ProcessBuilder pb;
+            if (grepPath != null) {
+                // Use grep with --line-buffered to filter lines containing "FPS"
+                String logcatCmd = "logcat";
+                String grepCmd = grepPath + " --line-buffered \"FPS\"";
+                // Run in a shell to allow pipe
+                pb = new ProcessBuilder("sh", "-c", logcatCmd + " | " + grepCmd);
+                Log.d(TAG, "Using grep at: " + grepPath);
+            } else {
+                // No grep: read all logcat lines and filter in Java
+                pb = new ProcessBuilder("logcat", "-s", "LorieNative:I", "-v", "time");
+                Log.d(TAG, "Grep not found, using Java filtering");
+            }
 
-                // Step 2: Start logcat with time format (same as LogcatLogger)
-                // Command: logcat -v time
-                String[] cmd = new String[]{"logcat", "-v", "time"};
-                process = Runtime.getRuntime().exec(cmd);
+            pb.redirectErrorStream(true); // essential to avoid blocking
+            process = pb.start();
 
-                // Step 3: Read the output stream
-                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
-                Log.d(TAG, "FPS reader thread started, reading lines...");
+            Log.d(TAG, "FPS reader thread started, reading lines...");
 
-                String line;
-                while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                    // Log every line for debugging (optional)
-                    Log.d(TAG, "logcat line: " + line);
+            String line;
+            while (fpsReaderRunning && (line = reader.readLine()) != null) {
+                Log.d(TAG, "logcat line: " + line);
 
-                    // Look for lines containing both "LorieNative" and "FPS"
-                    if (line.contains("LorieNative") && line.contains("FPS")) {
-                        // Write to file (exactly like LogcatLogger does)
-                        writeFpsLineToFile(line);
+                // If we used grep, the line is already guaranteed to contain "FPS"
+                // but we still check for robustness
+                if (line.contains("FPS")) {
+                    writeFpsLineToFile(line); // write raw line to fps.log
 
-                        // Parse the FPS value
-                        int idx = line.lastIndexOf('=');
-                        if (idx != -1) {
-                            String afterEq = line.substring(idx + 1).trim();
-                            String[] parts = afterEq.split("\\s+");
-                            if (parts.length > 0) {
-                                fpsValue = "FPS: " + parts[0];
-                                Log.d(TAG, "Updated FPS: " + fpsValue);
-                            }
+                    // Parse the FPS value
+                    int idx = line.lastIndexOf('=');
+                    if (idx != -1) {
+                        String afterEq = line.substring(idx + 1).trim();
+                        String[] parts = afterEq.split("\\s+");
+                        if (parts.length > 0) {
+                            fpsValue = "FPS: " + parts[0];
+                            Log.d(TAG, "Updated FPS: " + fpsValue);
                         }
                     }
                 }
-            } catch (Exception e) {
-                Log.e(TAG, "Error in FPS reader thread", e);
-                fpsValue = "FPS: error";
-            } finally {
-                // Clean up resources
-                if (reader != null) {
-                    try { reader.close(); } catch (IOException ignored) {}
-                }
-                if (process != null) {
-                    process.destroy();
-                }
-                // Close file writer
-                if (fpsFileWriter != null) {
-                    try { fpsFileWriter.close(); } catch (IOException ignored) {}
-                }
             }
-        }, "FPS-Logcat-Reader");
-        fpsReaderThread.setDaemon(true);
-        fpsReaderThread.start();
+        } catch (Exception e) {
+            Log.e(TAG, "Error in FPS reader thread", e);
+            fpsValue = "FPS: error";
+        } finally {
+            if (reader != null) try { reader.close(); } catch (IOException ignored) {}
+            if (process != null) process.destroy();
+            if (fpsFileWriter != null) {
+                try { fpsFileWriter.close(); } catch (IOException ignored) {}
+            }
+        }
+    }, "FPS-Logcat-Reader");
+    fpsReaderThread.setDaemon(true);
+    fpsReaderThread.start();
+}
+
+/**
+ * Locates a grep binary on the system.
+ * Checks:
+ * 1. App's private directory: /data/data/com.termux.x11/files/usr/bin/grep
+ * 2. Common system paths: /system/bin/grep, /system/xbin/grep, /bin/grep
+ * Returns the absolute path if found and executable, otherwise null.
+ */
+private String findGrepPath() {
+    // 1. Check inside app's files/usr/bin/ (Termux-style)
+    File customGrep = new File(getFilesDir(), "usr/bin/grep");
+    if (customGrep.exists() && customGrep.canExecute()) {
+        return customGrep.getAbsolutePath();
     }
 
+    // 2. System paths (typical on Android)
+    String[] systemPaths = {
+        "/system/bin/grep",
+        "/system/xbin/grep",
+        "/bin/grep"
+    };
+    for (String path : systemPaths) {
+        File f = new File(path);
+        if (f.exists() && f.canExecute()) {
+            return path;
+        }
+    }
+
+    return null; // no grep found
+}
     /**
      * Writes a line containing FPS to the fps.log file.
      */
