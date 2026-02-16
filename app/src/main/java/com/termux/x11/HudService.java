@@ -28,30 +28,32 @@ public class HudService extends Service {
 
     private volatile String fpsValue = "FPS: N/A";
 
-    private void startFpsLogcatReader() {
-        new Thread(() -> {
-            try {
-                Process p = Runtime.getRuntime().exec("logcat");
-                BufferedReader br =
-                        new BufferedReader(new InputStreamReader(p.getInputStream()));
+private void startFpsLogcatReader() {
+    new Thread(() -> {
+        try {
+            java.lang.Process p =
+                    Runtime.getRuntime().exec(new String[]{"logcat", "-v", "brief"});
 
-                Pattern fpsPattern =
-                        Pattern.compile("=\\s*([0-9]+(\\.[0-9]+)?)\\s*FPS");
+            BufferedReader br =
+                    new BufferedReader(new InputStreamReader(p.getInputStream()));
 
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (line.contains("LorieNative") && line.contains("FPS")) {
-                        Matcher m = fpsPattern.matcher(line);
-                        if (m.find()) {
-                            fpsValue = "FPS: " + m.group(1);
-                        }
+            Pattern fpsPattern =
+                    Pattern.compile("=\\s*([0-9]+(\\.[0-9]+)?)\\s*FPS");
+
+            String line;
+            while ((line = br.readLine()) != null) {
+                if (line.contains("LorieNative") && line.contains("FPS")) {
+                    Matcher m = fpsPattern.matcher(line);
+                    if (m.find()) {
+                        fpsValue = "FPS: " + m.group(1);
                     }
                 }
-            } catch (Exception e) {
-                fpsValue = "FPS: error";
             }
-        }, "fps-reader").start();
-    }
+        } catch (Exception e) {
+            fpsValue = "FPS: N/A";
+        }
+    }, "fps-logcat").start();
+}
 
     /* ================= CPU USAGE ================= */
 
