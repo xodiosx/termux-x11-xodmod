@@ -69,12 +69,6 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import java.util.regex.PatternSyntaxException;
 
-import android.os.Build;
-import android.os.SystemClock;
-import android.view.Choreographer;
-import android.view.FrameMetrics;
-import android.view.View;
-
 import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
 class InputConnectionWrapper implements InputConnection {
@@ -361,28 +355,7 @@ public class LorieView extends SurfaceView implements InputStub {
         return winHandler;
     }
 
-private static volatile float currentFPS = 0f;
-private static int frameCount = 0;
-private static long lastFPSTime = 0;
-private static final Object fpsLock = new Object();
 
-public static void onFrameRendered() {
-    synchronized (fpsLock) {
-        long now = SystemClock.elapsedRealtime();
-        if (lastFPSTime == 0) lastFPSTime = now;
-        frameCount++;
-        long delta = now - lastFPSTime;
-        if (delta >= 500) { // update twice per second
-            currentFPS = frameCount * 1000f / delta;
-            frameCount = 0;
-            lastFPSTime = now;
-        }
-    }
-}
-
-public static float getCurrentFPS() {
-    return currentFPS;
-}
 
 
 // In LorieView.java
@@ -696,34 +669,14 @@ public boolean onGenericMotionEvent(MotionEvent event) {
     }
 
     private void init() {
-    getHolder().addCallback(mSurfaceCallback);
-    clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
-    nativeInit();
-    screenInfo = new ScreenInfo(this);
-    cursorLocker = new CursorLocker(this);
-
-    Activity activity = getActivity();
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-        activity.getWindow().addOnFrameMetricsAvailableListener(
-            (window, frameMetrics, dropCount) -> {
-                onFrameRendered();
-            },
-            new Handler(Looper.getMainLooper())
-        );
-    } else {
-        Choreographer.getInstance().postFrameCallback(new Choreographer.FrameCallback() {
-            @Override
-            public void doFrame(long frameTimeNanos) {
-                onFrameRendered();
-                Choreographer.getInstance().postFrameCallback(this);
-            }
-        });
+        getHolder().addCallback(mSurfaceCallback);
+        clipboard = (ClipboardManager) getContext().getSystemService(Context.CLIPBOARD_SERVICE);
+        nativeInit();
+        screenInfo = new ScreenInfo(this);
+        cursorLocker = new CursorLocker(this);
     }
-}  
 
-
- public void setCallback(Callback callback) {
+    public void setCallback(Callback callback) {
         mCallback = callback;
         triggerCallback();
     }
