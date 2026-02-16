@@ -14,6 +14,7 @@ public class LogcatLogger {
 
     private static Thread loggerThread;
     private static boolean running = false;
+    private static java.lang.Process logcatProcess; // keep reference to destroy later
 
     public static void start(Context context) {
         if (running) return;
@@ -29,17 +30,18 @@ public class LogcatLogger {
                 } else {
                     dir = new File(Environment.getExternalStorageDirectory(), "xodos/logs");
                 }
-
                 if (!dir.exists()) dir.mkdirs();
 
                 File logFile = new File(dir, "app.log");
                 FileWriter writer = new FileWriter(logFile, true);
 
-                Runtime.getRuntime().exec("logcat -c");
+                // Clear logcat buffer (using ProcessBuilder for safety)
+                new ProcessBuilder("logcat", "-c").start().waitFor();
 
-                // ⚠ IMPORTANT: java.lang.Process (fully qualified)
-                java.lang.Process logcatProcess =
-                        Runtime.getRuntime().exec(new String[]{"logcat", "-v", "time"});
+                // Use sh -c to run logcat (allows complex commands if needed)
+                ProcessBuilder pb = new ProcessBuilder("sh", "-c", "logcat -v time");
+                pb.redirectErrorStream(true); // merge stderr to avoid blocking
+                logcatProcess = pb.start();
 
                 BufferedReader reader = new BufferedReader(
                         new InputStreamReader(logcatProcess.getInputStream())
@@ -57,6 +59,11 @@ public class LogcatLogger {
 
             } catch (Exception e) {
                 e.printStackTrace();
+            } finally {
+                if (logcatProcess != null) {
+                    logcatProcess.destroy();
+                    logcatProcess = null;
+                }
             }
         });
 
@@ -68,6 +75,10 @@ public class LogcatLogger {
         if (loggerThread != null) {
             loggerThread.interrupt();
             loggerThread = null;
+        }
+        if (logcatProcess != null) {
+            logcatProcess.destroy();
+            logcatProcess = null;
         }
     }
 }
