@@ -306,37 +306,45 @@ public class HudService extends Service {
 
     /* ===================== CPU USAGE ===================== */
 
-    private String getCpuUsage() {
-        try (BufferedReader br = new BufferedReader(new FileReader("/proc/stat"))) {
-            String line = br.readLine();
-            if (line == null || !line.startsWith("cpu ")) return "CPU: N/A";
+    /* ===================== CPU USAGE (per-process using Android shell) ===================== */
+private String getCpuUsage() {
+    try {
+        // 1️⃣ Get the current process PID
+        int pid = android.os.Process.myPid(); // current process PID
 
-            String[] tokens = line.split("\\s+");
-            long idle = Long.parseLong(tokens[4]);
-            long total = 0;
-            for (int i = 1; i < tokens.length; i++) total += Long.parseLong(tokens[i]);
+        // 2️⃣ Clock ticks per second
+        int hz = 100; // Android default CLK_TCK
 
-            if (lastTotal < 0) {
-                lastTotal = total;
-                lastIdle = idle;
-                return "CPU: ...";
-            }
+        // 3️⃣ Construct shell command to mimic your bash logic
+        String cmd = "/system/bin/sh -c '" +
+                "PID=" + pid + " && " +
+                "HZ=" + hz + " && " +
+                "read utime1 stime1 < <(/system/bin/awk \"{print $14, $15}\" /proc/$PID/stat) && " +
+                "/system/bin/sleep 1 && " +
+                "read utime2 stime2 < <(/system/bin/awk \"{print $14, $15}\" /proc/$PID/stat) && " +
+                "delta=$(( (utime2 + stime2) - (utime1 + stime1) )) && " +
+                "cpu=$(/system/bin/awk -v d=$delta -v h=$HZ 'BEGIN { printf \"%.1f\", (d/h)*100 }') && " +
+                "echo $cpu" +
+                "'";
 
-            long dTotal = total - lastTotal;
-            long dIdle = idle - lastIdle;
-            lastTotal = total;
-            lastIdle = idle;
+        // 4️⃣ Execute shell command
+        java.lang.Process process = Runtime.getRuntime().exec(cmd);
 
-            if (dTotal <= 0) return "CPU: 0%";
-            float usage = (dTotal - dIdle) * 100f / dTotal;
-            return String.format("CPU: %.1f%%", usage);
-        } catch (Exception e) {
-            lastTotal = -1;
-            lastIdle = -1;
+        // 5️⃣ Read output
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line = reader.readLine();
+        reader.close();
+        process.waitFor();
+
+        if (line != null && !line.isEmpty()) {
+            return "CPU: " + line + "%";
+        } else {
             return "CPU: N/A";
         }
+    } catch (Exception e) {
+        return "CPU: N/A";
     }
-
+}
     /* ===================== GPU NAME ===================== */
 
     private String detectGpuName() {
