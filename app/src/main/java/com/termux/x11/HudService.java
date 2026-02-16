@@ -8,9 +8,10 @@ import android.os.*;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
+import android.util.Log;
 import android.view.*;
 import android.widget.TextView;
-import android.util.Log;
+
 import androidx.core.app.NotificationCompat;
 
 import java.io.*;
@@ -22,6 +23,7 @@ public class HudService extends Service {
 
     private static final String CHANNEL_ID = "hud_channel";
     private static final int NOTIFICATION_ID = 1;
+    private static final String TAG = "HudService"; // for debug logs
 
     private WindowManager windowManager;
     private TextView hudView;
@@ -44,6 +46,9 @@ public class HudService extends Service {
     /* ---------- MEMORY ---------- */
     private String totalRAM = null;
 
+    // For writing FPS lines to file (like LogcatLogger)
+    private FileWriter fpsFileWriter;
+
     @Override
     public void onCreate() {
         super.onCreate();
@@ -58,8 +63,27 @@ public class HudService extends Service {
 
         createOverlayView();
 
-        startFpsReaderThread();      // new method replacing old logcat thread
+        // Prepare the FPS log file (optional, for debugging)
+        prepareFpsLogFile();
+
+        startFpsReaderThread();      // now uses the improved method
         startStatsLoop();
+    }
+
+    /**
+     * Prepares a file to write every captured FPS line.
+     * File is saved in: <app_external_files>/logs/fps.log
+     */
+    private void prepareFpsLogFile() {
+        try {
+            File dir = new File(getExternalFilesDir(null), "logs");
+            if (!dir.exists()) dir.mkdirs();
+            File logFile = new File(dir, "fps.log");
+            fpsFileWriter = new FileWriter(logFile, true); // append mode
+            Log.d(TAG, "FPS log file: " + logFile.getAbsolutePath());
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to create fps.log", e);
+        }
     }
 
     /* ===================== UI ===================== */
@@ -143,56 +167,78 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== FPS READER (based on LorieNative logs) ===================== */
+    /* ===================== IMPROVED FPS READER (like LogcatLogger) ===================== */
 
     private void startFpsReaderThread() {
-    fpsReaderRunning = true;
-    fpsReaderThread = new Thread(() -> {
-        java.lang.Process process = null;
-        BufferedReader reader = null;
-        try {
-            // Use ProcessBuilder to merge error stream and avoid blocking
-            ProcessBuilder pb = new ProcessBuilder("logcat", "-s", "LorieNative:I", "-v", "brief");
-            pb.redirectErrorStream(true); // combine stderr into stdout
-            process = pb.start();
+        fpsReaderRunning = true;
+        fpsReaderThread = new Thread(() -> {
+            Process process = null;
+            BufferedReader reader = null;
 
-            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            try {
+                // 1. Clear old logs (same as LogcatLogger)
+                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
 
-            String line;
-            while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                // Example: "02-16 17:45:28.796 I LorieNative: 34 frames in 5.0 seconds = 6.8 FPS"
-              Log.d("HudService", "logcat line: " + line);   // <-- add this
-                
+                // 2. Start logcat with the correct filter and time format
+                //    Command: logcat -v time -s LorieNative:I
+                String[] cmd = new String[]{"logcat", "-v", "time", "-s", "LorieNative:I"};
+                process = Runtime.getRuntime().exec(cmd);
+
+                // 3. Read the output stream
+                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+                Log.d(TAG, "FPS reader thread started, reading lines...");
+
+                String line;
+                while (fpsReaderRunning && (line = reader.readLine()) != null) {
+                    // Log every line for debugging (you can comment this out later)
+                    Log.d(TAG, "logcat line: " + line);
+
+                    // Check if this line contains our FPS information
                     if (line.contains("LorieNative") && line.contains("FPS")) {
-                    int idx = line.lastIndexOf('=');
-                    if (idx != -1) {
-                        String afterEq = line.substring(idx + 1).trim();
-                        String[] parts = afterEq.split("\\s+");
-                        if (parts.length > 0) {
-                            fpsValue = "FPS: " + parts[0];
+                        // Write to file for verification
+                        writeFpsLineToFile(line);
+
+                        // Parse the FPS value
+                        int idx = line.lastIndexOf('=');
+                        if (idx != -1) {
+                            String afterEq = line.substring(idx + 1).trim();
+                            String[] parts = afterEq.split("\\s+");
+                            if (parts.length > 0) {
+                                fpsValue = "FPS: " + parts[0];
+                                Log.d(TAG, "Updated FPS: " + fpsValue);
+                            }
                         }
                     }
                 }
+            } catch (Exception e) {
+                Log.e(TAG, "Error in FPS reader thread", e);
+                fpsValue = "FPS: error";
+            } finally {
+                // Close resources
+                if (reader != null) try { reader.close(); } catch (IOException ignored) {}
+                if (process != null) process.destroy();
+                // Close file writer
+                if (fpsFileWriter != null) {
+                    try { fpsFileWriter.close(); } catch (IOException ignored) {}
+                }
             }
-        } catch (Exception e) {
-            fpsValue = "FPS: error";
-        } finally {
-            if (reader != null) try { reader.close(); } catch (IOException ignored) {}
-            if (process != null) process.destroy();
-        }
-    }, "FPS-Logcat-Reader");
-    fpsReaderThread.setDaemon(true);
-    fpsReaderThread.start();
-}
-
-    // Compatibility: keep old method name if called elsewhere, but redirect to new one
-    private void startLogcatFpsThread() {
-        startFpsReaderThread();
+        }, "FPS-Logcat-Reader");
+        fpsReaderThread.setDaemon(true);
+        fpsReaderThread.start();
     }
 
-    // The old tickLogicalFps is no longer needed – we keep it as a no-op to avoid breaking existing calls
-    private void tickLogicalFps() {
-        // Do nothing – FPS now comes from logcat reader
+    /**
+     * Writes a line containing FPS to the fps.log file.
+     */
+    private void writeFpsLineToFile(String line) {
+        if (fpsFileWriter == null) return;
+        try {
+            fpsFileWriter.write(line + "\n");
+            fpsFileWriter.flush();
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to write FPS line to file", e);
+        }
     }
 
     /* ===================== CPU TEMP ===================== */
@@ -336,10 +382,14 @@ public class HudService extends Service {
 
     @Override
     public void onDestroy() {
-        fpsReaderRunning = false; // stop the reader thread
+        fpsReaderRunning = false;
         if (fpsReaderThread != null) fpsReaderThread.interrupt();
         if (hudView != null) windowManager.removeView(hudView);
         if (scheduler != null) scheduler.shutdownNow();
+        // Close file writer
+        if (fpsFileWriter != null) {
+            try { fpsFileWriter.close(); } catch (IOException ignored) {}
+        }
         super.onDestroy();
     }
 
