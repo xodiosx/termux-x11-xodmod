@@ -1,6 +1,5 @@
 package com.termux.x11;
 
-import java.util.Locale;
 import android.app.*;
 import android.content.Intent;
 import android.graphics.*;
@@ -15,15 +14,16 @@ import android.widget.TextView;
 import androidx.core.app.NotificationCompat;
 
 import java.io.*;
+import java.util.Locale;
 import java.util.concurrent.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class HudService extends Service {
 
+    private static final String TAG = "HudService";
     private static final String CHANNEL_ID = "hud_channel";
     private static final int NOTIFICATION_ID = 1;
-    private static final String TAG = "HudService";
 
     private WindowManager windowManager;
     private TextView hudView;
@@ -31,23 +31,23 @@ public class HudService extends Service {
     private ScheduledExecutorService scheduler;
     private Handler mainHandler;
 
-    /* ---------- FPS STATE ---------- */
-    private volatile String fpsValue = "FPS: N/A";
-    private Thread fpsReaderThread;
-    private volatile boolean fpsReaderRunning = true;
+    /* ================= FPS ================= */
+    private volatile String fpsValue = "FPS: ...";
+    private Thread fpsThread;
+    private volatile boolean fpsRunning;
 
-    /* ---------- CPU STATE ---------- */
+    private static final Pattern FPS_PATTERN =
+            Pattern.compile("=\\s*([0-9]+(?:\\.[0-9]+)?)\\s*FPS");
+
+    /* ================= CPU ================= */
     private long lastIdle = -1;
     private long lastTotal = -1;
 
-    /* ---------- GPU ---------- */
+    /* ================= GPU ================= */
     private String gpuName = "GPU: N/A";
 
-    /* ---------- MEMORY ---------- */
-    private String totalRAM = null;
-
-    // For writing FPS lines to a file (exactly like LogcatLogger)
-    private FileWriter fpsFileWriter;
+    /* ================= MEMORY ================= */
+    private String totalRam;
 
     @Override
     public void onCreate() {
@@ -59,286 +59,169 @@ public class HudService extends Service {
         startForeground(NOTIFICATION_ID, buildNotification());
 
         gpuName = detectGpuName();
-        totalRAM = getTotalRAM();
+        totalRam = getTotalRAM();
 
-        createOverlayView();
-
-        // Prepare the FPS log file in the same way as LogcatLogger
-        prepareFpsLogFile();
-
-        startFpsReaderThread();      // now identical to LogcatLogger's method
-        startStatsLoop();
+        createOverlay();
+        startFpsReader();
+        startHudUpdater();
     }
 
-    /**
-     * Prepares a file to write every captured FPS line.
-     * File is saved in: <app_external_files>/logs/fps.log
-     */
-    private void prepareFpsLogFile() {
-        try {
-            File dir = new File(getExternalFilesDir(null), "logs");
-            if (!dir.exists()) dir.mkdirs();
-            File logFile = new File(dir, "fps.log");
-            fpsFileWriter = new FileWriter(logFile, true); // append mode
-            Log.d(TAG, "FPS log file: " + logFile.getAbsolutePath());
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to create fps.log", e);
-        }
-    }
+    /* ================= OVERLAY ================= */
 
-    /* ===================== UI ===================== */
-
-    private void createOverlayView() {
+    private void createOverlay() {
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
 
         hudView = new TextView(this);
-        hudView.setTextSize(12);
-        hudView.setPadding(10, 4, 10, 4);
         hudView.setTypeface(Typeface.MONOSPACE);
-        hudView.setBackgroundColor(Color.argb(140, 0, 0, 0));
+        hudView.setTextSize(12);
+        hudView.setPadding(12, 6, 12, 6);
+        hudView.setBackgroundColor(Color.argb(160, 0, 0, 0));
 
-        WindowManager.LayoutParams params =
-                new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                        PixelFormat.TRANSLUCENT
-                );
+        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+        );
 
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.x = 5;
-        params.y = 0;
+        p.gravity = Gravity.TOP | Gravity.START;
+        p.x = 5;
+        p.y = 5;
 
-        windowManager.addView(hudView, params);
+        windowManager.addView(hudView, p);
     }
 
-    /* ===================== MAIN LOOP ===================== */
+    /* ================= HUD LOOP ================= */
 
-    private void startStatsLoop() {
+    private void startHudUpdater() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
-
-            SpannableString hudText = buildColoredHud();
-
-            mainHandler.post(() -> hudView.setText(hudText));
-
-        }, 0, 2, TimeUnit.SECONDS);
+            SpannableString s = buildHudText();
+            mainHandler.post(() -> hudView.setText(s));
+        }, 0, 1, TimeUnit.SECONDS);
     }
 
-    /* ===================== HUD TEXT ===================== */
-
-    private SpannableString buildColoredHud() {
-
-        String fps = fpsValue;   // already includes "FPS: " prefix
+    private SpannableString buildHudText() {
+        String fps = fpsValue;
         String temp = getCpuTemp();
         String cpu = getCpuUsage();
-        String mem = getMemoryInfo();
         String gpu = gpuName;
+        String mem = getMemoryInfo();
 
-        String full =
-                fps + " | " +
-                temp + " | " +
-                cpu + " | " +
-                gpu + " | " +
-                mem;
+        String text = fps + " | " + temp + " | " + cpu + " | " + gpu + " | " + mem;
+        SpannableString ss = new SpannableString(text);
 
-        SpannableString s = new SpannableString(full);
+        color(ss, fps, Color.GREEN);
+        color(ss, temp, Color.CYAN);
+        color(ss, cpu, Color.YELLOW);
+        color(ss, gpu, Color.MAGENTA);
+        color(ss, mem, Color.LTGRAY);
 
-        colorPart(s, fps, Color.YELLOW);
-        colorPart(s, temp, Color.CYAN);
-        colorPart(s, cpu, Color.GREEN);
-        colorPart(s, gpu, Color.MAGENTA);
-        colorPart(s, mem, Color.LTGRAY);
-
-        return s;
+        return ss;
     }
 
-    private void colorPart(SpannableString s, String part, int color) {
-        int start = s.toString().indexOf(part);
-        if (start >= 0) {
-            s.setSpan(
-                    new ForegroundColorSpan(color),
-                    start,
-                    start + part.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
+    private void color(SpannableString s, String part, int color) {
+        int i = s.toString().indexOf(part);
+        if (i >= 0) {
+            s.setSpan(new ForegroundColorSpan(color),
+                    i, i + part.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
     }
 
-    /* ===================== FPS READER (EXACTLY LIKE LogcatLogger) ===================== */
+    /* ================= FPS READER ================= */
 
-    private void startFpsReaderThread() {
-    fpsReaderRunning = true;
-    fpsReaderThread = new Thread(() -> {
-        java.lang.Process process = null;
-        BufferedReader reader = null;
-        String grepPath = findGrepPath(); // check for grep binary
+    private void startFpsReader() {
+        fpsRunning = true;
 
-        try {
-            // Clear logcat buffer (optional, helps start fresh)
-            Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
-//logcat | grep --line-buffered "FPS"
-            ProcessBuilder pb;
-            if (grepPath != null) {
-                // Use grep with --line-buffered to filter lines containing "FPS"
-                String logcatCmd = "logcat";
-                String grepCmd = grepPath + " --line-buffered \"FPS\"";
-                // Run in a shell to allow pipe
-                pb = new ProcessBuilder("sh", "-c", logcatCmd + " | " + grepCmd);
-                Log.d(TAG, "Using grep at: " + grepPath);
-            } else {
-                // No grep: read all logcat lines and filter in Java
-                pb = new ProcessBuilder("logcat", "-s", "LorieNative:I", "-v", "time");
-                Log.d(TAG, "Grep not found, using Java filtering");
-            }
+        fpsThread = new Thread(() -> {
+            BufferedReader reader = null;
+            Process proc = null;
 
-            pb.redirectErrorStream(true); // essential to avoid blocking
-            process = pb.start();
+            try {
+                String cmd =
+                        "logcat -v brief | grep --line-buffered \"LorieNative:.*FPS\"";
 
-            reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                proc = new ProcessBuilder("sh", "-c", cmd)
+                        .redirectErrorStream(true)
+                        .start();
 
-            Log.d(TAG, "FPS reader thread started, reading lines...");
+                reader = new BufferedReader(
+                        new InputStreamReader(proc.getInputStream()));
 
-            String line;
-            while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                Log.d(TAG, "logcat line: " + line);
+                String line;
+                while (fpsRunning && (line = reader.readLine()) != null) {
 
-                // If we used grep, the line is already guaranteed to contain "FPS"
-                // but we still check for robustness
-                if (line.contains("FPS")) {
-                    writeFpsLineToFile(line); // write raw line to fps.log
-
-                    // Parse the FPS value
-                    int idx = line.lastIndexOf('=');
-                    if (idx != -1) {
-                        String afterEq = line.substring(idx + 1).trim();
-                        String[] parts = afterEq.split("\\s+");
-                        if (parts.length > 0) {
-                            fpsValue = "FPS: " + parts[0];
-                            Log.d(TAG, "Updated FPS: " + fpsValue);
-                        }
+                    Matcher m = FPS_PATTERN.matcher(line);
+                    if (m.find()) {
+                        fpsValue = "FPS: " + m.group(1);
                     }
                 }
+
+            } catch (Exception e) {
+                Log.e(TAG, "FPS reader failed", e);
+                fpsValue = "FPS: ERR";
+            } finally {
+                try { if (reader != null) reader.close(); } catch (IOException ignored) {}
+                if (proc != null) proc.destroy();
             }
-        } catch (Exception e) {
-            Log.e(TAG, "Error in FPS reader thread", e);
-            fpsValue = "FPS: error";
-        } finally {
-            if (reader != null) try { reader.close(); } catch (IOException ignored) {}
-            if (process != null) process.destroy();
-            if (fpsFileWriter != null) {
-                try { fpsFileWriter.close(); } catch (IOException ignored) {}
-            }
-        }
-    }, "FPS-Logcat-Reader");
-    fpsReaderThread.setDaemon(true);
-    fpsReaderThread.start();
-}
+        }, "FPS-Reader");
 
-/**
- * Locates a grep binary on the system.
- * Checks:
- * 1. App's private directory: /data/data/com.termux.x11/files/usr/bin/grep
- * 2. Common system paths: /system/bin/grep, /system/xbin/grep, /bin/grep
- * Returns the absolute path if found and executable, otherwise null.
- */
-private String findGrepPath() {
-    // 1. Check inside app's files/usr/bin/ (Termux-style)
-    File customGrep = new File(getFilesDir(), "usr/bin/grep");
-    if (customGrep.exists() && customGrep.canExecute()) {
-        return customGrep.getAbsolutePath();
+        fpsThread.setDaemon(true);
+        fpsThread.start();
     }
 
-    // 2. System paths (typical on Android)
-    String[] systemPaths = {
-        "/system/bin/grep",
-        "/system/xbin/grep",
-        "/bin/grep"
-    };
-    for (String path : systemPaths) {
-        File f = new File(path);
-        if (f.exists() && f.canExecute()) {
-            return path;
-        }
-    }
-
-    return null; // no grep found
-}
-    /**
-     * Writes a line containing FPS to the fps.log file.
-     */
-    private void writeFpsLineToFile(String line) {
-        if (fpsFileWriter == null) return;
-        try {
-            fpsFileWriter.write(line + "\n");
-            fpsFileWriter.flush();
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to write FPS line to file", e);
-        }
-    }
-
-    /* ===================== CPU TEMP ===================== */
+    /* ================= CPU ================= */
 
     private String getCpuTemp() {
         for (int i = 0; i < 10; i++) {
-            try {
-                String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
-                BufferedReader br = new BufferedReader(new FileReader(path));
-                int temp = Integer.parseInt(br.readLine().trim());
-                br.close();
+            try (BufferedReader br = new BufferedReader(
+                    new FileReader("/sys/class/thermal/thermal_zone" + i + "/temp"))) {
 
-                if (temp > 10000) {
-                    return String.format("CPU: %.1f°C", temp / 1000f);
+                int t = Integer.parseInt(br.readLine().trim());
+                if (t > 10000) {
+                    return String.format(Locale.US,
+                            "CPU: %.1f°C", t / 1000f);
                 }
             } catch (Exception ignored) {}
         }
         return "CPU: N/A";
     }
 
-    /* ===================== CPU USAGE ===================== */
-
     private String getCpuUsage() {
         try (BufferedReader br = new BufferedReader(new FileReader("/proc/stat"))) {
-            String line = br.readLine();
-            if (line == null || !line.startsWith("cpu ")) return "CPU: N/A";
 
-            String[] tokens = line.split("\\s+");
-
-            long idle = Long.parseLong(tokens[4]);
+            String[] s = br.readLine().split("\\s+");
+            long idle = Long.parseLong(s[4]);
             long total = 0;
-            for (int i = 1; i < tokens.length; i++) {
-                total += Long.parseLong(tokens[i]);
-            }
+
+            for (int i = 1; i < s.length; i++)
+                total += Long.parseLong(s[i]);
 
             if (lastTotal < 0) {
-                lastTotal = total;
                 lastIdle = idle;
+                lastTotal = total;
                 return "CPU: ...";
             }
 
-            long dTotal = total - lastTotal;
-            long dIdle = idle - lastIdle;
+            long dt = total - lastTotal;
+            long di = idle - lastIdle;
 
             lastTotal = total;
             lastIdle = idle;
 
-            if (dTotal <= 0) {
-                return "CPU: 0%";
-            }
-
-            float usage = (dTotal - dIdle) * 100f / dTotal;
-            return String.format("CPU: %.1f%%", usage);
+            return String.format(Locale.US,
+                    "CPU: %.1f%%", (dt - di) * 100f / dt);
 
         } catch (Exception e) {
-            lastTotal = -1;
-            lastIdle = -1;
+            lastTotal = lastIdle = -1;
             return "CPU: N/A";
         }
     }
 
-    /* ===================== GPU NAME ===================== */
+    /* ================= GPU ================= */
 
     private String detectGpuName() {
         String[] props = {
@@ -349,85 +232,74 @@ private String findGrepPath() {
 
         for (String p : props) {
             String v = getProp(p);
-            if (v != null && !v.isEmpty()) {
+            if (v != null && !v.isEmpty())
                 return "GPU: " + v;
-            }
         }
         return "GPU: Unknown";
     }
 
-    private String getProp(String key) {
+    private String getProp(String k) {
         try {
-            java.lang.Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
-            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            Process p = Runtime.getRuntime().exec(new String[]{"getprop", k});
+            BufferedReader br = new BufferedReader(
+                    new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
             return null;
         }
     }
 
-    /* ===================== MEMORY ===================== */
+    /* ================= MEMORY ================= */
 
     private String getTotalRAM() {
-        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-        activityManager.getMemoryInfo(memoryInfo);
-        return formatBytes(memoryInfo.totalMem);
-    }
-
-    private String getAvailableRAM() {
-        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-        activityManager.getMemoryInfo(memoryInfo);
-        long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
-        return formatBytes(usedMem);
-    }
-
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        int exp = (int) (Math.log(bytes) / Math.log(1024));
-        String pre = "KMGTPE".charAt(exp-1) + "";
-        return String.format(Locale.US, "%.1f %sB", bytes / Math.pow(1024, exp), pre);
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        ((ActivityManager) getSystemService(ACTIVITY_SERVICE))
+                .getMemoryInfo(mi);
+        return formatBytes(mi.totalMem);
     }
 
     private String getMemoryInfo() {
-        if (totalRAM == null) totalRAM = getTotalRAM();
-        return "MEM: " + getAvailableRAM() + " / " + totalRAM;
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        ((ActivityManager) getSystemService(ACTIVITY_SERVICE))
+                .getMemoryInfo(mi);
+
+        long used = mi.totalMem - mi.availMem;
+        return "MEM: " + formatBytes(used) + " / " + totalRam;
     }
 
-    /* ===================== NOTIFICATION ===================== */
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel =
-                    new NotificationChannel(
-                            CHANNEL_ID,
-                            "HUD Service",
-                            NotificationManager.IMPORTANCE_LOW
-                    );
-            getSystemService(NotificationManager.class)
-                    .createNotificationChannel(channel);
-        }
+    private String formatBytes(long b) {
+        int u = 0;
+        double d = b;
+        while (d > 1024) { d /= 1024; u++; }
+        return String.format(Locale.US, "%.1f %cB", d, "KMGTPE".charAt(u));
     }
+
+    /* ================= NOTIFICATION ================= */
 
     private Notification buildNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("HUD active")
-                .setContentText("System monitor overlay running")
+                .setContentText("Performance overlay running")
                 .setSmallIcon(android.R.drawable.presence_online)
                 .build();
     }
 
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel ch = new NotificationChannel(
+                    CHANNEL_ID, "HUD",
+                    NotificationManager.IMPORTANCE_LOW);
+            getSystemService(NotificationManager.class)
+                    .createNotificationChannel(ch);
+        }
+    }
+
     @Override
     public void onDestroy() {
-        fpsReaderRunning = false;
-        if (fpsReaderThread != null) fpsReaderThread.interrupt();
-        if (hudView != null) windowManager.removeView(hudView);
+        fpsRunning = false;
+        if (fpsThread != null) fpsThread.interrupt();
         if (scheduler != null) scheduler.shutdownNow();
-        // Close file writer
-        if (fpsFileWriter != null) {
-            try { fpsFileWriter.close(); } catch (IOException ignored) {}
-        }
+        if (hudView != null) windowManager.removeView(hudView);
         super.onDestroy();
     }
 
