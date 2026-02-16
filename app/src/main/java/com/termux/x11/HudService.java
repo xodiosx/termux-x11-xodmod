@@ -138,7 +138,7 @@ public class HudService extends Service {
 
         fpsThread = new Thread(() -> {
             BufferedReader reader = null;
-            Process proc = null;
+            java.lang.Process proc = null;
 
             try {
                 String cmd =
@@ -240,7 +240,7 @@ public class HudService extends Service {
 
     private String getProp(String k) {
         try {
-            Process p = Runtime.getRuntime().exec(new String[]{"getprop", k});
+            java.lang.Process p = Runtime.getRuntime().exec(new String[]{"getprop", k});
             BufferedReader br = new BufferedReader(
                     new InputStreamReader(p.getInputStream()));
             return br.readLine();
