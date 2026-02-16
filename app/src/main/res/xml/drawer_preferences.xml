@@ -26,7 +26,11 @@
             android:icon="@android:drawable/ic_menu_directions"
             android:summary="@string/select_controller_summary" />
             
-        
+        <SwitchPreferenceCompat
+    app:key="enable_hud"
+    app:title="Enable HUD Overlay"
+    app:summary="Show system monitor overlay on X11"
+    app:defaultValue="false" />
 
             
         <Preference

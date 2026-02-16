@@ -16,14 +16,15 @@ import androidx.core.app.NotificationCompat;
 
 import java.io.*;
 import java.util.concurrent.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class HudService extends Service {
 
     private static final String CHANNEL_ID = "hud_channel";
     private static final int NOTIFICATION_ID = 1;
     private static final String TAG = "HudService";
+
+    // Set this to true to write ALL logcat lines to a file (for debugging)
+    private static final boolean DEBUG_WRITE_ALL_LOGS = true;
 
     private WindowManager windowManager;
     private TextView hudView;
@@ -46,8 +47,9 @@ public class HudService extends Service {
     /* ---------- MEMORY ---------- */
     private String totalRAM = null;
 
-    // For writing FPS lines to file (like LogcatLogger)
+    // File writers
     private FileWriter fpsFileWriter;
+    private FileWriter allLogsWriter; // for DEBUG_WRITE_ALL_LOGS
 
     @Override
     public void onCreate() {
@@ -63,29 +65,38 @@ public class HudService extends Service {
 
         createOverlayView();
 
-        // Prepare the FPS log file
-        prepareFpsLogFile();
+        // Prepare log files
+        prepareLogFiles();
 
         startFpsReaderThread();
         startStatsLoop();
     }
 
     /**
-     * Prepares a file to write every captured FPS line.
-     * File is saved in: <app_external_files>/logs/fps.log
+     * Prepares fps.log and (if DEBUG) logcat_all.log
      */
-    private void prepareFpsLogFile() {
+    private void prepareLogFiles() {
         try {
             File dir = new File(getExternalFilesDir(null), "logs");
             if (!dir.exists()) dir.mkdirs();
-            File logFile = new File(dir, "fps.log");
-            fpsFileWriter = new FileWriter(logFile, true); // append mode
-            Log.d(TAG, "FPS log file: " + logFile.getAbsolutePath());
-            // Write a start marker
+
+            // fps.log (always)
+            File fpsFile = new File(dir, "fps.log");
+            fpsFileWriter = new FileWriter(fpsFile, true);
+            Log.d(TAG, "FPS log file: " + fpsFile.getAbsolutePath());
             fpsFileWriter.write("--- HudService started at " + System.currentTimeMillis() + " ---\n");
             fpsFileWriter.flush();
+
+            // logcat_all.log (debug only)
+            if (DEBUG_WRITE_ALL_LOGS) {
+                File allFile = new File(dir, "logcat_all.log");
+                allLogsWriter = new FileWriter(allFile, true);
+                allLogsWriter.write("--- HudService started at " + System.currentTimeMillis() + " ---\n");
+                allLogsWriter.flush();
+                Log.d(TAG, "All logs file: " + allFile.getAbsolutePath());
+            }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to create fps.log", e);
+            Log.e(TAG, "Failed to create log files", e);
         }
     }
 
@@ -122,31 +133,21 @@ public class HudService extends Service {
     private void startStatsLoop() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
-
             SpannableString hudText = buildColoredHud();
-
             mainHandler.post(() -> hudView.setText(hudText));
-
         }, 0, 2, TimeUnit.SECONDS);
     }
 
     /* ===================== HUD TEXT ===================== */
 
     private SpannableString buildColoredHud() {
-
-        String fps = fpsValue;   // already includes "FPS: " prefix
+        String fps = fpsValue;
         String temp = getCpuTemp();
         String cpu = getCpuUsage();
         String mem = getMemoryInfo();
         String gpu = gpuName;
 
-        String full =
-                fps + " | " +
-                temp + " | " +
-                cpu + " | " +
-                gpu + " | " +
-                mem;
-
+        String full = fps + " | " + temp + " | " + cpu + " | " + gpu + " | " + mem;
         SpannableString s = new SpannableString(full);
 
         colorPart(s, fps, Color.YELLOW);
@@ -161,38 +162,20 @@ public class HudService extends Service {
     private void colorPart(SpannableString s, String part, int color) {
         int start = s.toString().indexOf(part);
         if (start >= 0) {
-            s.setSpan(
-                    new ForegroundColorSpan(color),
-                    start,
-                    start + part.length(),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            );
+            s.setSpan(new ForegroundColorSpan(color), start,
+                    start + part.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
     }
 
-    /* ===================== FPS READER – FINAL VERSION ===================== */
+    /* ===================== FPS READER – ULTIMATE DEBUG VERSION ===================== */
 
-    /**
-     * Locates a grep binary on the system.
-     * Checks:
-     * 1. App's private directory: /data/data/com.termux.x11/files/usr/bin/grep
-     * 2. Common system paths: /system/bin/grep, /system/xbin/grep, /bin/grep
-     * Returns the absolute path if found and executable, otherwise null.
-     */
     private String findGrepPath() {
-        // 1. Check inside app's files/usr/bin/ (Termux-style)
         File customGrep = new File(getFilesDir(), "usr/bin/grep");
         if (customGrep.exists() && customGrep.canExecute()) {
             Log.d(TAG, "Found grep in app data: " + customGrep.getAbsolutePath());
             return customGrep.getAbsolutePath();
         }
-
-        // 2. System paths (typical on Android)
-        String[] systemPaths = {
-            "/system/bin/grep",
-            "/system/xbin/grep",
-            "/bin/grep"
-        };
+        String[] systemPaths = { "/system/bin/grep", "/system/xbin/grep", "/bin/grep" };
         for (String path : systemPaths) {
             File f = new File(path);
             if (f.exists() && f.canExecute()) {
@@ -200,9 +183,8 @@ public class HudService extends Service {
                 return path;
             }
         }
-
         Log.d(TAG, "No grep binary found, will use Java filtering");
-        return null; // no grep found
+        return null;
     }
 
     private void startFpsReaderThread() {
@@ -213,14 +195,14 @@ public class HudService extends Service {
             String grepPath = findGrepPath();
 
             try {
-                // Clear logcat buffer (optional, helps start fresh)
+                // Clear logcat buffer (optional)
                 Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
 
                 ProcessBuilder pb;
                 String commandDescription;
 
                 if (grepPath != null) {
-                    // Use grep with --line-buffered, but also apply tag filter to exclude our own logs
+                    // Use grep with --line-buffered, but also tag filter to exclude our own debug logs
                     // Command: logcat -s LorieNative:I -v time | grep --line-buffered "FPS"
                     String logcatCmd = "logcat -s LorieNative:I -v time";
                     String grepCmd = grepPath + " --line-buffered \"FPS\"";
@@ -228,64 +210,80 @@ public class HudService extends Service {
                     pb = new ProcessBuilder("sh", "-c", fullCmd);
                     commandDescription = "grep pipeline: " + fullCmd;
                 } else {
-                    // No grep: use logcat with tag filter and filter in Java
+                    // No grep: read all logcat lines with tag filter, filter in Java
                     pb = new ProcessBuilder("logcat", "-s", "LorieNative:I", "-v", "time");
                     commandDescription = "logcat with tag filter (Java parsing)";
                 }
 
-                pb.redirectErrorStream(true); // essential to avoid blocking
+                pb.redirectErrorStream(true);
                 process = pb.start();
 
                 Log.d(TAG, "FPS reader thread started, command: " + commandDescription);
-                writeFpsLineToFile("# Command: " + commandDescription);
+                writeToFpsLog("# Command: " + commandDescription);
 
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                 String line;
                 while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                    // If we used grep, the line already contains "FPS", but we still check for safety
-                    if (line.contains("FPS")) {
-                        // Write raw line to fps.log
-                        writeFpsLineToFile(line);
-
-                        // Parse the FPS value (expecting format like "... = 6.8 FPS")
-                        int idx = line.lastIndexOf('=');
-                        if (idx != -1) {
-                            String afterEq = line.substring(idx + 1).trim();
-                            String[] parts = afterEq.split("\\s+");
-                            if (parts.length > 0) {
-                                fpsValue = "FPS: " + parts[0];
-                                Log.d(TAG, "Updated FPS: " + fpsValue);
-                            }
+                    // DEBUG: write every line to logcat_all.log
+                    if (DEBUG_WRITE_ALL_LOGS && allLogsWriter != null) {
+                        try {
+                            allLogsWriter.write(line + "\n");
+                            allLogsWriter.flush();
+                        } catch (IOException e) {
+                            Log.e(TAG, "Failed to write to allLogsWriter", e);
                         }
+                    }
+
+                    // Always check for FPS
+                    if (line.contains("FPS")) {
+                        writeToFpsLog(line); // store raw line
+                        parseFpsLine(line);
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error in FPS reader thread", e);
                 fpsValue = "FPS: error";
-                writeFpsLineToFile("# ERROR: " + e.getMessage());
+                writeToFpsLog("# ERROR: " + e.getMessage());
             } finally {
                 if (reader != null) try { reader.close(); } catch (IOException ignored) {}
                 if (process != null) process.destroy();
-                if (fpsFileWriter != null) {
-                    try { fpsFileWriter.close(); } catch (IOException ignored) {}
-                }
+                closeWriters();
             }
         }, "FPS-Logcat-Reader");
         fpsReaderThread.setDaemon(true);
         fpsReaderThread.start();
     }
 
-    /**
-     * Writes a line to the fps.log file.
-     */
-    private void writeFpsLineToFile(String line) {
+    private void parseFpsLine(String line) {
+        // Expect format: "... = 6.8 FPS"
+        int idx = line.lastIndexOf('=');
+        if (idx != -1) {
+            String afterEq = line.substring(idx + 1).trim();
+            String[] parts = afterEq.split("\\s+");
+            if (parts.length > 0) {
+                fpsValue = "FPS: " + parts[0];
+                Log.d(TAG, "Updated FPS: " + fpsValue);
+            }
+        }
+    }
+
+    private void writeToFpsLog(String line) {
         if (fpsFileWriter == null) return;
         try {
             fpsFileWriter.write(line + "\n");
             fpsFileWriter.flush();
         } catch (IOException e) {
             Log.e(TAG, "Failed to write to fps.log", e);
+        }
+    }
+
+    private void closeWriters() {
+        if (fpsFileWriter != null) {
+            try { fpsFileWriter.close(); } catch (IOException ignored) {}
+        }
+        if (allLogsWriter != null) {
+            try { allLogsWriter.close(); } catch (IOException ignored) {}
         }
     }
 
@@ -298,7 +296,6 @@ public class HudService extends Service {
                 BufferedReader br = new BufferedReader(new FileReader(path));
                 int temp = Integer.parseInt(br.readLine().trim());
                 br.close();
-
                 if (temp > 10000) {
                     return String.format("CPU: %.1f°C", temp / 1000f);
                 }
@@ -315,12 +312,9 @@ public class HudService extends Service {
             if (line == null || !line.startsWith("cpu ")) return "CPU: N/A";
 
             String[] tokens = line.split("\\s+");
-
             long idle = Long.parseLong(tokens[4]);
             long total = 0;
-            for (int i = 1; i < tokens.length; i++) {
-                total += Long.parseLong(tokens[i]);
-            }
+            for (int i = 1; i < tokens.length; i++) total += Long.parseLong(tokens[i]);
 
             if (lastTotal < 0) {
                 lastTotal = total;
@@ -330,17 +324,12 @@ public class HudService extends Service {
 
             long dTotal = total - lastTotal;
             long dIdle = idle - lastIdle;
-
             lastTotal = total;
             lastIdle = idle;
 
-            if (dTotal <= 0) {
-                return "CPU: 0%";
-            }
-
+            if (dTotal <= 0) return "CPU: 0%";
             float usage = (dTotal - dIdle) * 100f / dTotal;
             return String.format("CPU: %.1f%%", usage);
-
         } catch (Exception e) {
             lastTotal = -1;
             lastIdle = -1;
@@ -351,17 +340,10 @@ public class HudService extends Service {
     /* ===================== GPU NAME ===================== */
 
     private String detectGpuName() {
-        String[] props = {
-                "ro.hardware.vulkan",
-                "ro.hardware.egl",
-                "ro.board.platform"
-        };
-
+        String[] props = { "ro.hardware.vulkan", "ro.hardware.egl", "ro.board.platform" };
         for (String p : props) {
             String v = getProp(p);
-            if (v != null && !v.isEmpty()) {
-                return "GPU: " + v;
-            }
+            if (v != null && !v.isEmpty()) return "GPU: " + v;
         }
         return "GPU: Unknown";
     }
@@ -409,14 +391,9 @@ public class HudService extends Service {
 
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel =
-                    new NotificationChannel(
-                            CHANNEL_ID,
-                            "HUD Service",
-                            NotificationManager.IMPORTANCE_LOW
-                    );
-            getSystemService(NotificationManager.class)
-                    .createNotificationChannel(channel);
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID, "HUD Service", NotificationManager.IMPORTANCE_LOW);
+            getSystemService(NotificationManager.class).createNotificationChannel(channel);
         }
     }
 
@@ -434,9 +411,7 @@ public class HudService extends Service {
         if (fpsReaderThread != null) fpsReaderThread.interrupt();
         if (hudView != null) windowManager.removeView(hudView);
         if (scheduler != null) scheduler.shutdownNow();
-        if (fpsFileWriter != null) {
-            try { fpsFileWriter.close(); } catch (IOException ignored) {}
-        }
+        closeWriters();
         super.onDestroy();
     }
 
