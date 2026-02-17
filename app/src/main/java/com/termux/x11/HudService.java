@@ -49,19 +49,20 @@ public class HudService extends Service {
     private long lastAppCpuTicks = 0;
     private long lastWallTimeMs = 0;
 
-    /* ---------- GPU / MEM ---------- */
+    /* ---------- GPU / MEM / TEMP ---------- */
     private String gpuName = "GPU: Unknown";
     private String totalRam;
 
     /* ===================== SERVICE ===================== */
-public class LocalBinder extends Binder {
-    public HudService getService() {
-        return HudService.this;
+
+    public class LocalBinder extends Binder {
+        public HudService getService() {
+            return HudService.this;
+        }
     }
-}
 
+    private final IBinder binder = new LocalBinder();
 
-private final IBinder binder = new LocalBinder();
     @Override
     public void onCreate() {
         super.onCreate();
@@ -142,46 +143,48 @@ private final IBinder binder = new LocalBinder();
         }, 0, 2, TimeUnit.SECONDS);
     }
 
+    /* ===================== BUILD HUD WITH COLORS ===================== */
+
     private SpannableString buildHudText() {
-    String cpuUsage = getCpuUsage();
-    String mem = getMemoryInfo();
-    String temp = getCpuTemp();
-    float tempVal = getCpuTempValue();
-    long availMB = getAvailableMemoryMB();
+        String fps = fpsText;
+        String temp = getCpuTemp();          // e.g. "CPU: 45.2°C"
+        String cpu = getCpuUsage();
+        String mem = getMemoryInfo();
+        long availMB = getAvailableMemoryMB();
+        float tempVal = getCpuTempValue();   // numeric for coloring
 
-    String full =
-            fpsText + " | " +
-            temp + " | " +
-            cpuUsage + " | " +
-            gpuName + " | " +
-            mem;
+        String full = fps + " | " + temp + " | " + cpu + " | " + gpuName + " | " + mem;
+        SpannableString s = new SpannableString(full);
 
-    SpannableString s = new SpannableString(full);
+        // FPS color
+        color(s, fps, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
 
-    // FPS red if <10
-    color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
-    // Temperature color based on value
-    int tempColor;
-    if (tempVal < 0) {
-        tempColor = Color.LTGRAY; // unavailable
-    } else if (tempVal > 70) {
-        tempColor = Color.RED;
-    } else if (tempVal > 40) {
-        tempColor = Color.rgb(255, 165, 0); // orange
-    } else {
-        tempColor = Color.CYAN;
+        // Temperature color
+        int tempColor;
+        if (tempVal < 0) {
+            tempColor = Color.LTGRAY;      // unavailable
+        } else if (tempVal > 70) {
+            tempColor = Color.RED;
+        } else if (tempVal > 40) {
+            tempColor = Color.rgb(255, 165, 0); // orange
+        } else {
+            tempColor = Color.CYAN;
+        }
+        color(s, temp, tempColor);
+
+        // CPU usage always yellow
+        color(s, cpu, Color.YELLOW);
+
+        // GPU name magenta
+        color(s, gpuName, Color.MAGENTA);
+
+        // Memory red if < 800 MB available
+        int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
+        color(s, mem, memColor);
+
+        return s;
     }
-    color(s, temp, tempColor);
-    // CPU usage always yellow (could add threshold later if desired)
-    color(s, cpuUsage, Color.YELLOW);
-    // GPU name always magenta
-    color(s, gpuName, Color.MAGENTA);
-    // Memory red if available < 800 MB
-    int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
-    color(s, mem, memColor);
 
-    return s;
-}
     private void color(SpannableString s, String part, int color) {
         int start = s.toString().indexOf(part);
         if (start >= 0) {
@@ -191,14 +194,13 @@ private final IBinder binder = new LocalBinder();
         }
     }
 
-    /* ===================== FPS (LOGCAT) ===================== */
+    /* ===================== FPS READER (with logcat -c) ===================== */
 
     private void startFpsReader() {
         fpsThread = new Thread(() -> {
-        
             try {
-            //cleaning logs
-            Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
+                // Clear old logcat entries
+                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
 
                 ProcessBuilder pb = new ProcessBuilder(
                         "logcat", "-s", "LorieNative:I", "-v", "brief"
@@ -236,7 +238,6 @@ private final IBinder binder = new LocalBinder();
 
     /* ===================== CPU USAGE (whole app UID) ===================== */
 
-    /** Returns all PIDs belonging to this app's UID. */
     private int[] getAppPids() {
         int uid = android.os.Process.myUid();
         ArrayList<Integer> pids = new ArrayList<>();
@@ -276,7 +277,6 @@ private final IBinder binder = new LocalBinder();
         return out;
     }
 
-    /** Reads total CPU ticks (utime+stime) for a single PID. */
     private long readProcessCpuTicks(int pid) {
         try (BufferedReader br =
                      new BufferedReader(new FileReader("/proc/" + pid + "/stat"))) {
@@ -322,6 +322,40 @@ private final IBinder binder = new LocalBinder();
         return String.format(Locale.US, "CPU: %.1f%%", usage);
     }
 
+    /* ===================== CPU TEMPERATURE ===================== */
+
+    private String getCpuTemp() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
+                BufferedReader br = new BufferedReader(new FileReader(path));
+                int temp = Integer.parseInt(br.readLine().trim());
+                br.close();
+
+                if (temp > 10000) {
+                    return String.format("CPU: %.1f°C", temp / 1000f);
+                }
+            } catch (Exception ignored) {}
+        }
+        return "CPU: N/A";
+    }
+
+    private float getCpuTempValue() {
+        for (int i = 0; i < 10; i++) {
+            try {
+                String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
+                BufferedReader br = new BufferedReader(new FileReader(path));
+                int temp = Integer.parseInt(br.readLine().trim());
+                br.close();
+
+                if (temp > 10000) {
+                    return temp / 1000f;
+                }
+            } catch (Exception ignored) {}
+        }
+        return -1;
+    }
+
     /* ===================== MEMORY ===================== */
 
     private String getMemoryInfo() {
@@ -355,41 +389,8 @@ private final IBinder binder = new LocalBinder();
         return String.format(Locale.US, "%.1f %sB",
                 b / Math.pow(1024, e), "KMGTPE".charAt(e - 1));
     }
-    /* ===================== CPU TEMPERATURE ===================== */
-    
-    // CPU temperature reading
-private String getCpuTemp() {
-    for (int i = 0; i < 10; i++) {
-        try {
-            String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
-            BufferedReader br = new BufferedReader(new FileReader(path));
-            int temp = Integer.parseInt(br.readLine().trim());
-            br.close();
-            if (temp > 10000) { // typical value is in millidegrees
-                return String.format("CPU: %.1f°C", temp / 1000f);
-            }
-        } catch (Exception ignored) {}
-    }
-    return "CPU: N/A";
-}
 
-// Get numeric temperature in °C, or -1 if unavailable
-private float getCpuTempValue() {
-    for (int i = 0; i < 10; i++) {
-        try {
-            String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
-            BufferedReader br = new BufferedReader(new FileReader(path));
-            int temp = Integer.parseInt(br.readLine().trim());
-            br.close();
-            if (temp > 10000) {
-                return temp / 1000f;
-            }
-        } catch (Exception ignored) {}
-    }
-    return -1;
-}
-    
-    /* ===================== GPU ===================== */
+    /* ===================== GPU NAME ===================== */
 
     private String detectGpuName() {
         String[] props = {
@@ -447,10 +448,8 @@ private float getCpuTempValue() {
         super.onDestroy();
     }
 
-
-
-@Override
-public IBinder onBind(Intent intent) {
-    return binder;
-}
+    @Override
+    public IBinder onBind(Intent intent) {
+        return binder;
+    }
 }
