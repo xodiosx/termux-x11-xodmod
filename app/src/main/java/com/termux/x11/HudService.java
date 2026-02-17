@@ -1,6 +1,5 @@
 package com.termux.x11;
 
-import java.lang.ref.WeakReference;
 import java.util.Locale;
 import android.app.*;
 import android.content.*;
@@ -12,7 +11,9 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.*;
 import android.widget.TextView;
+
 import androidx.core.app.NotificationCompat;
+
 import java.io.*;
 import java.util.concurrent.*;
 
@@ -22,29 +23,36 @@ public class HudService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String TAG = "HudService";
 
-    // Binder for activity binding
+    // Binder for activity communication
     private final IBinder binder = new LocalBinder();
 
-    private ScheduledExecutorService scheduler;
-    private Handler mainHandler;
-
-    // UI: we no longer create a global overlay; we attach to an activity
+    // Activity reference (weak to avoid leaks)
     private WeakReference<Activity> targetActivity = null;
     private TextView hudView = null;
     private boolean isAttached = false;
 
+    private ScheduledExecutorService scheduler;
+    private Handler mainHandler;
+
     /* ---------- FPS STATE ---------- */
     private volatile String fpsValue = "FPS: N/A";
+    private volatile float fpsNumeric = -1f; // for threshold coloring
     private Thread fpsReaderThread;
     private volatile boolean fpsReaderRunning = true;
 
     /* ---------- CPU STATE ---------- */
+    // (no changes needed)
+
+    /* ---------- GPU ---------- */
     private String gpuName = "GPU: N/A";
+
+    /* ---------- MEMORY ---------- */
     private String totalRAM = null;
 
     @Override
     public void onCreate() {
         super.onCreate();
+
         mainHandler = new Handler(Looper.getMainLooper());
 
         createNotificationChannel();
@@ -53,7 +61,7 @@ public class HudService extends Service {
         gpuName = detectGpuName();
         totalRAM = getTotalRAM();
 
-        // Start background threads (FPS reader, stats loop)
+        // Start background threads (they will update the UI only when attached)
         startFpsReaderThread();
         startStatsLoop();
     }
@@ -62,15 +70,13 @@ public class HudService extends Service {
      * Called by the main activity to attach the HUD to its window.
      */
     public void attachToActivity(Activity activity) {
-        // If already attached to the same activity, do nothing
         if (targetActivity != null && targetActivity.get() == activity && isAttached) {
-            return;
+            return; // already attached to this activity
         }
 
         // Remove any previously attached HUD
         removeHudView();
 
-        // Store new activity reference
         targetActivity = new WeakReference<>(activity);
 
         // Create and attach the HUD view on UI thread
@@ -133,7 +139,7 @@ public class HudService extends Service {
     private void startStatsLoop() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
-            // Build HUD text
+            // Build HUD text with dynamic colors
             SpannableString hudText = buildColoredHud();
 
             // Update the TextView if attached
@@ -145,7 +151,7 @@ public class HudService extends Service {
         }, 0, 2, TimeUnit.SECONDS);
     }
 
-    /* ===================== HUD TEXT ===================== */
+    /* ===================== HUD TEXT with Dynamic Colors ===================== */
 
     private SpannableString buildColoredHud() {
         String fps = fpsValue;
@@ -157,13 +163,30 @@ public class HudService extends Service {
         String full = fps + " | " + temp + " | " + cpu + " | " + gpu + " | " + mem;
         SpannableString s = new SpannableString(full);
 
-        colorPart(s, fps, Color.YELLOW);
+        // Color each part; thresholds override default colors
+        colorPart(s, fps, getFpsColor());
         colorPart(s, temp, Color.CYAN);
-        colorPart(s, cpu, Color.GREEN);
+        colorPart(s, cpu, Color.YELLOW);
         colorPart(s, gpu, Color.MAGENTA);
-        colorPart(s, mem, Color.LTGRAY);
+        colorPart(s, mem, getMemoryColor());
 
         return s;
+    }
+
+    private int getFpsColor() {
+        // fpsNumeric is updated in parseFpsLine()
+        if (fpsNumeric >= 0 && fpsNumeric < 10) {
+            return Color.RED;
+        }
+        return Color.GREEN; // default
+    }
+
+    private int getMemoryColor() {
+        long availableMB = getAvailableMemoryMB();
+        if (availableMB >= 0 && availableMB < 800) {
+            return Color.RED;
+        }
+        return Color.LTGRAY; // default
     }
 
     private void colorPart(SpannableString s, String part, int color) {
@@ -204,7 +227,7 @@ public class HudService extends Service {
     private void startFpsReaderThread() {
         fpsReaderRunning = true;
         fpsReaderThread = new Thread(() -> {
-            Process process = null;
+            java.lang.Process process = null;  // fully qualified
             BufferedReader reader = null;
             String grepPath = findBinary("grep");
 
@@ -234,6 +257,7 @@ public class HudService extends Service {
             } catch (Exception e) {
                 Log.e(TAG, "Error in FPS reader thread", e);
                 fpsValue = "FPS: error";
+                fpsNumeric = -1;
             } finally {
                 if (reader != null) try { reader.close(); } catch (IOException ignored) {}
                 if (process != null) process.destroy();
@@ -249,7 +273,14 @@ public class HudService extends Service {
             String afterEq = line.substring(idx + 1).trim();
             String[] parts = afterEq.split("\\s+");
             if (parts.length > 0) {
-                fpsValue = "FPS: " + parts[0];
+                String numStr = parts[0];
+                fpsValue = "FPS: " + numStr;
+                try {
+                    fpsNumeric = Float.parseFloat(numStr);
+                } catch (NumberFormatException e) {
+                    fpsNumeric = -1;
+                }
+                Log.d(TAG, "Updated FPS: " + fpsValue);
             }
         }
     }
@@ -295,7 +326,7 @@ public class HudService extends Service {
                 "echo $cpu" +
                 "'";
 
-            Process process = Runtime.getRuntime().exec(cmd);
+            java.lang.Process process = Runtime.getRuntime().exec(cmd); // fully qualified
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line = reader.readLine();
             reader.close();
@@ -307,6 +338,7 @@ public class HudService extends Service {
                 return "CPU: N/A";
             }
         } catch (Exception e) {
+            Log.e(TAG, "CPU usage error", e);
             return "CPU: N/A";
         }
     }
@@ -324,7 +356,7 @@ public class HudService extends Service {
 
     private String getProp(String key) {
         try {
-            Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
+            java.lang.Process p = Runtime.getRuntime().exec(new String[]{"getprop", key}); // fully qualified
             BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
@@ -347,6 +379,19 @@ public class HudService extends Service {
         activityManager.getMemoryInfo(memoryInfo);
         long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
         return formatBytes(usedMem);
+    }
+
+    /** Returns available memory in MB, or -1 if unable. */
+    private long getAvailableMemoryMB() {
+        try {
+            ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
+            activityManager.getMemoryInfo(memoryInfo);
+            long availableBytes = memoryInfo.availMem;
+            return availableBytes / (1024 * 1024); // MB
+        } catch (Exception e) {
+            return -1;
+        }
     }
 
     private String formatBytes(long bytes) {
