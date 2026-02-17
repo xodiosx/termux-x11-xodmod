@@ -194,33 +194,36 @@ public class HudService extends Service {
     /* ===================== FPS READER (with logcat -c) ===================== */
 
     private void startFpsReader() {
-        fpsThread = new Thread(() -> {
-            try {
-                // Clear old logcat entries
-                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
+    fpsThread = new Thread(() -> {
+        try {
+            File logcatBin = ensureLogcatBinary();
 
-                ProcessBuilder pb = new ProcessBuilder(
-                        "logcat", "-s", "LorieNative:I", "-v", "brief"
-                );
-                pb.redirectErrorStream(true);
-                java.lang.Process p = pb.start();
+            ProcessBuilder pb = new ProcessBuilder(
+                    logcatBin.getAbsolutePath(),
+                    "-v", "brief",
+                    "-s", "LorieNative:I"
+            );
 
-                BufferedReader br =
-                        new BufferedReader(new InputStreamReader(p.getInputStream()));
+            pb.redirectErrorStream(true);
+            Process p = pb.start();
 
-                String line;
-                while (fpsRunning && (line = br.readLine()) != null) {
-                    if (!line.contains("FPS")) continue;
-                    parseFps(line);
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "FPS reader error", e);
+            BufferedReader br =
+                    new BufferedReader(new InputStreamReader(p.getInputStream()));
+
+            String line;
+            while (fpsRunning && (line = br.readLine()) != null) {
+                if (!line.contains("FPS")) continue;
+                parseFps(line);
             }
-        }, "FPS-Reader");
 
-        fpsThread.setDaemon(true);
-        fpsThread.start();
-    }
+        } catch (Exception e) {
+            Log.e(TAG, "FPS reader error", e);
+        }
+    }, "FPS-Reader");
+
+    fpsThread.setDaemon(true);
+    fpsThread.start();
+}
 
     private void parseFps(String line) {
         int idx = line.lastIndexOf('=');
@@ -429,4 +432,33 @@ public class HudService extends Service {
     public IBinder onBind(Intent intent) {
         return binder;
     }
+    /// logcat 
+    private File ensureLogcatBinary() throws Exception {
+    File binDir = new File(getFilesDir(), "bin");
+    if (!binDir.exists()) binDir.mkdirs();
+
+    File logcat = new File(binDir, "logcat");
+
+    if (!logcat.exists()) {
+        try (java.io.InputStream in = getAssets().open("logcat");
+             java.io.FileOutputStream out = new java.io.FileOutputStream(logcat)) {
+
+            byte[] buf = new byte[8192];
+            int len;
+            while ((len = in.read(buf)) > 0) {
+                out.write(buf, 0, len);
+            }
+        }
+
+        Runtime.getRuntime()
+                .exec(new String[]{"chmod", "755", logcat.getAbsolutePath()})
+                .waitFor();
+    }
+
+    return logcat;
+}
+    
+    
+    
+    
 }
