@@ -138,7 +138,9 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
-
+import android.content.ComponentName;
+import android.content.ServiceConnection;
+import android.os.IBinder;
 import androidx.annotation.NonNull;
 import androidx.core.math.MathUtils;
 import androidx.viewpager.widget.ViewPager;
@@ -207,8 +209,7 @@ private DrawerLayout drawerLayout;
     private static boolean softKeyboardShown = false;
 
 // hud
-// Inside MainActivity class
-
+// service hug
 private HudService hudService;
 private boolean isBound = false;
 
