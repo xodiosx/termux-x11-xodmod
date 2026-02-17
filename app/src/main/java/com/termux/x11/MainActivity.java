@@ -237,11 +237,11 @@ private boolean isResumed = false;
 // Call this when the HUD preference is enabled
 public void startHudService() {
     Intent intent = new Intent(this, HudService.class);
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        startForegroundService(intent);
-    } else {
+ //   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+ //       startForegroundService(intent);
+ //   } else {
         startService(intent);
-    }
+//    }
     bindService(intent, hudConnection, Context.BIND_AUTO_CREATE);
 }
 
