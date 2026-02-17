@@ -1,8 +1,9 @@
 package com.termux.x11;
 
+import java.lang.ref.WeakReference;
 import java.util.Locale;
 import android.app.*;
-import android.content.Intent;
+import android.content.*;
 import android.graphics.*;
 import android.os.*;
 import android.text.SpannableString;
@@ -11,9 +12,7 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.*;
 import android.widget.TextView;
-
 import androidx.core.app.NotificationCompat;
-
 import java.io.*;
 import java.util.concurrent.*;
 
@@ -23,11 +22,16 @@ public class HudService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String TAG = "HudService";
 
-    private WindowManager windowManager;
-    private TextView hudView;
+    // Binder for activity binding
+    private final IBinder binder = new LocalBinder();
 
     private ScheduledExecutorService scheduler;
     private Handler mainHandler;
+
+    // UI: we no longer create a global overlay; we attach to an activity
+    private WeakReference<Activity> targetActivity = null;
+    private TextView hudView = null;
+    private boolean isAttached = false;
 
     /* ---------- FPS STATE ---------- */
     private volatile String fpsValue = "FPS: N/A";
@@ -35,19 +39,12 @@ public class HudService extends Service {
     private volatile boolean fpsReaderRunning = true;
 
     /* ---------- CPU STATE ---------- */
-    private long lastIdle = -1;
-    private long lastTotal = -1;
-
-    /* ---------- GPU ---------- */
     private String gpuName = "GPU: N/A";
-
-    /* ---------- MEMORY ---------- */
     private String totalRAM = null;
 
     @Override
     public void onCreate() {
         super.onCreate();
-
         mainHandler = new Handler(Looper.getMainLooper());
 
         createNotificationChannel();
@@ -56,38 +53,79 @@ public class HudService extends Service {
         gpuName = detectGpuName();
         totalRAM = getTotalRAM();
 
-        createOverlayView();
-
+        // Start background threads (FPS reader, stats loop)
         startFpsReaderThread();
         startStatsLoop();
     }
 
-    /* ===================== UI ===================== */
+    /**
+     * Called by the main activity to attach the HUD to its window.
+     */
+    public void attachToActivity(Activity activity) {
+        // If already attached to the same activity, do nothing
+        if (targetActivity != null && targetActivity.get() == activity && isAttached) {
+            return;
+        }
 
-    private void createOverlayView() {
-        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        // Remove any previously attached HUD
+        removeHudView();
 
-        hudView = new TextView(this);
-        hudView.setTextSize(12);
-        hudView.setPadding(10, 4, 10, 4);
-        hudView.setTypeface(Typeface.MONOSPACE);
-        hudView.setBackgroundColor(Color.argb(140, 0, 0, 0));
+        // Store new activity reference
+        targetActivity = new WeakReference<>(activity);
 
-        WindowManager.LayoutParams params =
-                new WindowManager.LayoutParams(
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.WRAP_CONTENT,
-                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                        PixelFormat.TRANSLUCENT
-                );
+        // Create and attach the HUD view on UI thread
+        mainHandler.post(() -> {
+            if (targetActivity == null || targetActivity.get() == null) return;
+            Activity act = targetActivity.get();
 
-        params.gravity = Gravity.TOP | Gravity.START;
-        params.x = 5;
-        params.y = 0;
+            // Create the HUD TextView
+            hudView = new TextView(act);
+            hudView.setTextSize(12);
+            hudView.setPadding(10, 4, 10, 4);
+            hudView.setTypeface(Typeface.MONOSPACE);
+            hudView.setBackgroundColor(Color.argb(140, 0, 0, 0));
 
-        windowManager.addView(hudView, params);
+            // Use activity's WindowManager with its token
+            WindowManager wm = act.getWindowManager();
+            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_PANEL, // attaches to activity
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    PixelFormat.TRANSLUCENT
+            );
+
+            // Critical: use the activity's window token
+            params.token = act.getWindow().getDecorView().getWindowToken();
+            params.gravity = Gravity.TOP | Gravity.START;
+            params.x = 5;
+            params.y = 0;
+
+            wm.addView(hudView, params);
+            isAttached = true;
+
+            Log.d(TAG, "HUD attached to activity window");
+        });
+    }
+
+    /**
+     * Remove the HUD view from its current window.
+     */
+    private void removeHudView() {
+        if (hudView != null && isAttached && targetActivity != null) {
+            Activity act = targetActivity.get();
+            if (act != null && !act.isFinishing()) {
+                try {
+                    WindowManager wm = act.getWindowManager();
+                    wm.removeView(hudView);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error removing HUD view", e);
+                }
+            }
+            hudView = null;
+            isAttached = false;
+        }
     }
 
     /* ===================== MAIN LOOP ===================== */
@@ -95,8 +133,15 @@ public class HudService extends Service {
     private void startStatsLoop() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
+            // Build HUD text
             SpannableString hudText = buildColoredHud();
-            mainHandler.post(() -> hudView.setText(hudText));
+
+            // Update the TextView if attached
+            mainHandler.post(() -> {
+                if (hudView != null && isAttached) {
+                    hudView.setText(hudText);
+                }
+            });
         }, 0, 2, TimeUnit.SECONDS);
     }
 
@@ -129,17 +174,14 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== BINARY SEARCH (reusable) ===================== */
+    /* ===================== BINARY SEARCH ===================== */
 
     private String findBinary(String binaryName) {
-        // Look inside app's private data first (e.g., files/usr/bin/)
         File customBin = new File(getFilesDir(), "usr/bin/" + binaryName);
         if (customBin.exists() && customBin.canExecute()) {
             Log.d(TAG, "Found " + binaryName + " in app data: " + customBin.getAbsolutePath());
             return customBin.getAbsolutePath();
         }
-
-        // Common system binary paths
         String[] systemPaths = {
             "/system/bin/" + binaryName,
             "/system/xbin/" + binaryName,
@@ -153,50 +195,38 @@ public class HudService extends Service {
                 return path;
             }
         }
-
         Log.d(TAG, "Binary " + binaryName + " not found");
         return null;
     }
 
-    /* ===================== FPS READER (no file logging) ===================== */
+    /* ===================== FPS READER ===================== */
 
     private void startFpsReaderThread() {
         fpsReaderRunning = true;
         fpsReaderThread = new Thread(() -> {
-            java.lang.Process process = null;
+            Process process = null;
             BufferedReader reader = null;
             String grepPath = findBinary("grep");
 
             try {
-                // Clear logcat buffer (optional)
                 Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
 
                 ProcessBuilder pb;
-                String commandDescription;
-
                 if (grepPath != null) {
-                    // Use grep with --line-buffered
                     String logcatCmd = "logcat -s LorieNative:I -v time";
                     String grepCmd = grepPath + " --line-buffered \"FPS\"";
                     String fullCmd = logcatCmd + " | " + grepCmd;
                     pb = new ProcessBuilder("sh", "-c", fullCmd);
-                    commandDescription = "grep pipeline: " + fullCmd;
                 } else {
-                    // No grep: read all logcat lines with tag filter, filter in Java
                     pb = new ProcessBuilder("logcat", "-s", "LorieNative:I", "-v", "time");
-                    commandDescription = "logcat with tag filter (Java parsing)";
                 }
 
                 pb.redirectErrorStream(true);
                 process = pb.start();
-
-                Log.d(TAG, "FPS reader thread started, command: " + commandDescription);
-
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                 String line;
                 while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                    // Only parse FPS lines, no file logging
                     if (line.contains("FPS")) {
                         parseFpsLine(line);
                     }
@@ -214,14 +244,12 @@ public class HudService extends Service {
     }
 
     private void parseFpsLine(String line) {
-        // Expect format: "... = 6.8 FPS"
         int idx = line.lastIndexOf('=');
         if (idx != -1) {
             String afterEq = line.substring(idx + 1).trim();
             String[] parts = afterEq.split("\\s+");
             if (parts.length > 0) {
                 fpsValue = "FPS: " + parts[0];
-                Log.d(TAG, "Updated FPS: " + fpsValue);
             }
         }
     }
@@ -243,23 +271,19 @@ public class HudService extends Service {
         return "CPU: N/A";
     }
 
-    /* ===================== CPU USAGE (binary-aware) ===================== */
+    /* ===================== CPU USAGE ===================== */
 
     private String getCpuUsage() {
         try {
-            // Find required binaries
             String shPath = findBinary("sh");
             String awkPath = findBinary("awk");
             if (shPath == null || awkPath == null) {
-                Log.w(TAG, "sh or awk not found, CPU usage N/A");
                 return "CPU: N/A";
             }
 
             int pid = android.os.Process.myPid();
-            int hz = 100; // Android default CLK_TCK
+            int hz = 100;
 
-            // Build command using found paths
-            // We'll use a here-document style to avoid process substitution issues
             String cmd = shPath + " -c '" +
                 "PID=" + pid + " && " +
                 "HZ=" + hz + " && " +
@@ -271,7 +295,7 @@ public class HudService extends Service {
                 "echo $cpu" +
                 "'";
 
-            java.lang.Process process = Runtime.getRuntime().exec(cmd);
+            Process process = Runtime.getRuntime().exec(cmd);
             BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line = reader.readLine();
             reader.close();
@@ -283,7 +307,6 @@ public class HudService extends Service {
                 return "CPU: N/A";
             }
         } catch (Exception e) {
-            Log.e(TAG, "CPU usage error", e);
             return "CPU: N/A";
         }
     }
@@ -301,7 +324,7 @@ public class HudService extends Service {
 
     private String getProp(String key) {
         try {
-            java.lang.Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
+            Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
             BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
@@ -356,17 +379,25 @@ public class HudService extends Service {
                 .build();
     }
 
-    @Override
-    public void onDestroy() {
-        fpsReaderRunning = false;
-        if (fpsReaderThread != null) fpsReaderThread.interrupt();
-        if (hudView != null) windowManager.removeView(hudView);
-        if (scheduler != null) scheduler.shutdownNow();
-        super.onDestroy();
+    /* ===================== BINDING ===================== */
+
+    public class LocalBinder extends Binder {
+        public HudService getService() {
+            return HudService.this;
+        }
     }
 
     @Override
     public IBinder onBind(Intent intent) {
-        return null;
+        return binder;
+    }
+
+    @Override
+    public void onDestroy() {
+        fpsReaderRunning = false;
+        if (fpsReaderThread != null) fpsReaderThread.interrupt();
+        removeHudView();
+        if (scheduler != null) scheduler.shutdownNow();
+        super.onDestroy();
     }
 }
