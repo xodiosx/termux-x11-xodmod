@@ -11,7 +11,7 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.*;
 import android.widget.TextView;
-
+import java.lang.ref.WeakReference;
 import androidx.core.app.NotificationCompat;
 
 import java.io.*;
