@@ -14,10 +14,11 @@ import android.widget.TextView;
 import androidx.core.app.NotificationCompat;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.InputStreamReader;
-import java.io.IOException;
 import java.lang.ref.WeakReference;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -43,9 +44,9 @@ public class HudService extends Service {
     private Thread fpsThread;
     private volatile boolean fpsRunning = true;
 
-    /* ---------- CPU ---------- */
-    private long lastCpuTime = 0;
-    private long lastWallTime = 0;
+    /* ---------- CPU (whole app) ---------- */
+    private long lastAppCpuTicks = 0;
+    private long lastWallTimeMs = 0;
 
     /* ---------- GPU / MEM ---------- */
     private String gpuName = "GPU: Unknown";
@@ -134,23 +135,28 @@ public class HudService extends Service {
     }
 
     private SpannableString buildHudText() {
-    String cpu = getCpuUsage();
-    String mem = getMemoryInfo();
-    long availMB = getAvailableMemoryMB();
+        String cpu = getCpuUsage();
+        String mem = getMemoryInfo();
+        long availMB = getAvailableMemoryMB();
 
-    String full = fpsText + " | " + cpu + " | " + gpuName + " | " + mem;
-    SpannableString s = new SpannableString(full);
+        String full =
+                fpsText + " | " +
+                cpu + " | " +
+                gpuName + " | " +
+                mem;
 
-    // FPS red if <10
-    color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
-    color(s, cpu, Color.YELLOW);
-    color(s, gpuName, Color.MAGENTA);
-    // Memory red if available < 800 MB
-    int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
-    color(s, mem, memColor);
+        SpannableString s = new SpannableString(full);
 
-    return s;
-}
+        // FPS red if <10
+        color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
+        color(s, cpu, Color.YELLOW);
+        color(s, gpuName, Color.MAGENTA);
+        // Memory red if available < 800 MB
+        int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
+        color(s, mem, memColor);
+
+        return s;
+    }
 
     private void color(SpannableString s, String part, int color) {
         int start = s.toString().indexOf(part);
@@ -200,35 +206,92 @@ public class HudService extends Service {
         } catch (Exception ignored) {}
     }
 
-    /* ===================== CPU USAGE (NO SHELL) ===================== */
+    /* ===================== CPU USAGE (whole app UID) ===================== */
 
-    private String getCpuUsage() {
-        try (BufferedReader br = new BufferedReader(new FileReader("/proc/self/stat"))) {
-            String[] t = br.readLine().split("\\s+");
+    /** Returns all PIDs belonging to this app's UID. */
+    private int[] getAppPids() {
+        int uid = android.os.Process.myUid();
+        ArrayList<Integer> pids = new ArrayList<>();
 
-            long utime = Long.parseLong(t[13]);
-            long stime = Long.parseLong(t[14]);
-            long cpuTime = utime + stime;
-            long now = SystemClock.elapsedRealtime();
+        File proc = new File("/proc");
+        File[] files = proc.listFiles();
+        if (files == null) return new int[0];
 
-            if (lastWallTime == 0) {
-                lastCpuTime = cpuTime;
-                lastWallTime = now;
-                return "CPU: ...";
+        for (File f : files) {
+            if (!f.isDirectory()) continue;
+
+            int pid;
+            try {
+                pid = Integer.parseInt(f.getName());
+            } catch (NumberFormatException e) {
+                continue;
             }
 
-            long dCpu = cpuTime - lastCpuTime;
-            long dTime = now - lastWallTime;
+            try (BufferedReader br =
+                         new BufferedReader(new FileReader("/proc/" + pid + "/status"))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (line.startsWith("Uid:")) {
+                        String[] parts = line.split("\\s+");
+                        int procUid = Integer.parseInt(parts[1]);
+                        if (procUid == uid) {
+                            pids.add(pid);
+                        }
+                        break;
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
 
-            lastCpuTime = cpuTime;
-            lastWallTime = now;
+        int[] out = new int[pids.size()];
+        for (int i = 0; i < pids.size(); i++) out[i] = pids.get(i);
+        return out;
+    }
 
-            float usage = (dCpu * 100f) / (dTime * 100f);
-            return String.format(Locale.US, "CPU: %.1f%%", usage);
+    /** Reads total CPU ticks (utime+stime) for a single PID. */
+    private long readProcessCpuTicks(int pid) {
+        try (BufferedReader br =
+                     new BufferedReader(new FileReader("/proc/" + pid + "/stat"))) {
+
+            String[] t = br.readLine().split("\\s+");
+            long utime = Long.parseLong(t[13]);
+            long stime = Long.parseLong(t[14]);
+            return utime + stime;
 
         } catch (Exception e) {
-            return "CPU: N/A";
+            return 0;
         }
+    }
+
+    private String getCpuUsage() {
+        long now = SystemClock.elapsedRealtime();
+        int[] pids = getAppPids();
+
+        long totalCpuTicks = 0;
+        for (int pid : pids) {
+            totalCpuTicks += readProcessCpuTicks(pid);
+        }
+
+        if (lastWallTimeMs == 0) {
+            lastWallTimeMs = now;
+            lastAppCpuTicks = totalCpuTicks;
+            return "CPU: ...";
+        }
+
+        long dCpu = totalCpuTicks - lastAppCpuTicks;   // ticks
+        long dTime = now - lastWallTimeMs;              // ms
+
+        lastWallTimeMs = now;
+        lastAppCpuTicks = totalCpuTicks;
+
+        if (dTime <= 0) return "CPU: 0%";
+
+        // USER_HZ = 100 → 1 tick = 10 ms
+        // cpu_ms = dCpu * 10
+        // usage% = (cpu_ms / dTime) * 100 = dCpu * 1000 / dTime
+        float usage = (dCpu * 1000f) / dTime;
+
+        return String.format(Locale.US, "CPU: %.1f%%", usage);
     }
 
     /* ===================== MEMORY ===================== */
@@ -248,24 +311,24 @@ public class HudService extends Service {
         return formatBytes(mi.totalMem);
     }
 
+    private long getAvailableMemoryMB() {
+        try {
+            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+            am.getMemoryInfo(mi);
+            return mi.availMem / (1024 * 1024); // MB
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
     private String formatBytes(long b) {
         int e = (int) (Math.log(b) / Math.log(1024));
         return String.format(Locale.US, "%.1f %sB",
                 b / Math.pow(1024, e), "KMGTPE".charAt(e - 1));
     }
 
-  private long getAvailableMemoryMB() {
-    try {
-        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
-        am.getMemoryInfo(mi);
-        return mi.availMem / (1024 * 1024); // MB
-    } catch (Exception e) {
-        return -1;
-    }
-}
-    
-        /* ===================== GPU ===================== */
+    /* ===================== GPU ===================== */
 
     private String detectGpuName() {
         String[] props = {
