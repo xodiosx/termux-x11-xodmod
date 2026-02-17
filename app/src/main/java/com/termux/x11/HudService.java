@@ -23,9 +23,6 @@ public class HudService extends Service {
     private static final int NOTIFICATION_ID = 1;
     private static final String TAG = "HudService";
 
-    // Set this to true to write ALL logcat lines to a file (for debugging)
-    private static final boolean DEBUG_WRITE_ALL_LOGS = true;
-
     private WindowManager windowManager;
     private TextView hudView;
 
@@ -47,10 +44,6 @@ public class HudService extends Service {
     /* ---------- MEMORY ---------- */
     private String totalRAM = null;
 
-    // File writers
-    private FileWriter fpsFileWriter;
-    private FileWriter allLogsWriter; // for DEBUG_WRITE_ALL_LOGS
-
     @Override
     public void onCreate() {
         super.onCreate();
@@ -65,39 +58,8 @@ public class HudService extends Service {
 
         createOverlayView();
 
-        // Prepare log files
-        prepareLogFiles();
-
         startFpsReaderThread();
         startStatsLoop();
-    }
-
-    /**
-     * Prepares fps.log and (if DEBUG) logcat_all.log
-     */
-    private void prepareLogFiles() {
-        try {
-            File dir = new File(getExternalFilesDir(null), "logs");
-            if (!dir.exists()) dir.mkdirs();
-
-            // fps.log (always)
-            File fpsFile = new File(dir, "fps.log");
-            fpsFileWriter = new FileWriter(fpsFile, true);
-            Log.d(TAG, "FPS log file: " + fpsFile.getAbsolutePath());
-            fpsFileWriter.write("--- HudService started at " + System.currentTimeMillis() + " ---\n");
-            fpsFileWriter.flush();
-
-            // logcat_all.log (debug only)
-            if (DEBUG_WRITE_ALL_LOGS) {
-                File allFile = new File(dir, "logcat_all.log");
-                allLogsWriter = new FileWriter(allFile, true);
-                allLogsWriter.write("--- HudService started at " + System.currentTimeMillis() + " ---\n");
-                allLogsWriter.flush();
-                Log.d(TAG, "All logs file: " + allFile.getAbsolutePath());
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to create log files", e);
-        }
     }
 
     /* ===================== UI ===================== */
@@ -167,32 +129,43 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== FPS READER – ULTIMATE DEBUG VERSION ===================== */
+    /* ===================== BINARY SEARCH (reusable) ===================== */
 
-    private String findGrepPath() {
-        File customGrep = new File(getFilesDir(), "usr/bin/grep");
-        if (customGrep.exists() && customGrep.canExecute()) {
-            Log.d(TAG, "Found grep in app data: " + customGrep.getAbsolutePath());
-            return customGrep.getAbsolutePath();
+    private String findBinary(String binaryName) {
+        // Look inside app's private data first (e.g., files/usr/bin/)
+        File customBin = new File(getFilesDir(), "usr/bin/" + binaryName);
+        if (customBin.exists() && customBin.canExecute()) {
+            Log.d(TAG, "Found " + binaryName + " in app data: " + customBin.getAbsolutePath());
+            return customBin.getAbsolutePath();
         }
-        String[] systemPaths = { "/system/bin/grep", "/system/xbin/grep", "/bin/grep" };
+
+        // Common system binary paths
+        String[] systemPaths = {
+            "/system/bin/" + binaryName,
+            "/system/xbin/" + binaryName,
+            "/bin/" + binaryName,
+            "/vendor/bin/" + binaryName
+        };
         for (String path : systemPaths) {
             File f = new File(path);
             if (f.exists() && f.canExecute()) {
-                Log.d(TAG, "Found system grep: " + path);
+                Log.d(TAG, "Found system " + binaryName + ": " + path);
                 return path;
             }
         }
-        Log.d(TAG, "No grep binary found, will use Java filtering");
+
+        Log.d(TAG, "Binary " + binaryName + " not found");
         return null;
     }
+
+    /* ===================== FPS READER (no file logging) ===================== */
 
     private void startFpsReaderThread() {
         fpsReaderRunning = true;
         fpsReaderThread = new Thread(() -> {
             java.lang.Process process = null;
             BufferedReader reader = null;
-            String grepPath = findGrepPath();
+            String grepPath = findBinary("grep");
 
             try {
                 // Clear logcat buffer (optional)
@@ -202,8 +175,7 @@ public class HudService extends Service {
                 String commandDescription;
 
                 if (grepPath != null) {
-                    // Use grep with --line-buffered, but also tag filter to exclude our own debug logs
-                    // Command: logcat -s LorieNative:I -v time | grep --line-buffered "FPS"
+                    // Use grep with --line-buffered
                     String logcatCmd = "logcat -s LorieNative:I -v time";
                     String grepCmd = grepPath + " --line-buffered \"FPS\"";
                     String fullCmd = logcatCmd + " | " + grepCmd;
@@ -219,36 +191,22 @@ public class HudService extends Service {
                 process = pb.start();
 
                 Log.d(TAG, "FPS reader thread started, command: " + commandDescription);
-                writeToFpsLog("# Command: " + commandDescription);
 
                 reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                 String line;
                 while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                    // DEBUG: write every line to logcat_all.log
-                    if (DEBUG_WRITE_ALL_LOGS && allLogsWriter != null) {
-                        try {
-                            allLogsWriter.write(line + "\n");
-                            allLogsWriter.flush();
-                        } catch (IOException e) {
-                            Log.e(TAG, "Failed to write to allLogsWriter", e);
-                        }
-                    }
-
-                    // Always check for FPS
+                    // Only parse FPS lines, no file logging
                     if (line.contains("FPS")) {
-                        writeToFpsLog(line); // store raw line
                         parseFpsLine(line);
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error in FPS reader thread", e);
                 fpsValue = "FPS: error";
-                writeToFpsLog("# ERROR: " + e.getMessage());
             } finally {
                 if (reader != null) try { reader.close(); } catch (IOException ignored) {}
                 if (process != null) process.destroy();
-                closeWriters();
             }
         }, "FPS-Logcat-Reader");
         fpsReaderThread.setDaemon(true);
@@ -265,25 +223,6 @@ public class HudService extends Service {
                 fpsValue = "FPS: " + parts[0];
                 Log.d(TAG, "Updated FPS: " + fpsValue);
             }
-        }
-    }
-
-    private void writeToFpsLog(String line) {
-        if (fpsFileWriter == null) return;
-        try {
-            fpsFileWriter.write(line + "\n");
-            fpsFileWriter.flush();
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to write to fps.log", e);
-        }
-    }
-
-    private void closeWriters() {
-        if (fpsFileWriter != null) {
-            try { fpsFileWriter.close(); } catch (IOException ignored) {}
-        }
-        if (allLogsWriter != null) {
-            try { allLogsWriter.close(); } catch (IOException ignored) {}
         }
     }
 
@@ -304,47 +243,51 @@ public class HudService extends Service {
         return "CPU: N/A";
     }
 
-    /* ===================== CPU USAGE ===================== */
+    /* ===================== CPU USAGE (binary-aware) ===================== */
 
-    /* ===================== CPU USAGE (per-process using Android shell) ===================== */
-private String getCpuUsage() {
-    try {
-        // 1️⃣ Get the current process PID
-        int pid = android.os.Process.myPid(); // current process PID
+    private String getCpuUsage() {
+        try {
+            // Find required binaries
+            String shPath = findBinary("sh");
+            String awkPath = findBinary("awk");
+            if (shPath == null || awkPath == null) {
+                Log.w(TAG, "sh or awk not found, CPU usage N/A");
+                return "CPU: N/A";
+            }
 
-        // 2️⃣ Clock ticks per second
-        int hz = 100; // Android default CLK_TCK
+            int pid = android.os.Process.myPid();
+            int hz = 100; // Android default CLK_TCK
 
-        // 3️⃣ Construct shell command to mimic your bash logic
-        String cmd = "/system/bin/sh -c '" +
+            // Build command using found paths
+            // We'll use a here-document style to avoid process substitution issues
+            String cmd = shPath + " -c '" +
                 "PID=" + pid + " && " +
                 "HZ=" + hz + " && " +
-                "read utime1 stime1 < <(/system/bin/awk \"{print $14, $15}\" /proc/$PID/stat) && " +
-                "/system/bin/sleep 1 && " +
-                "read utime2 stime2 < <(/system/bin/awk \"{print $14, $15}\" /proc/$PID/stat) && " +
+                "read utime1 stime1 < <(" + awkPath + " \"{print $14, $15}\" /proc/$PID/stat) && " +
+                "sleep 1 && " +
+                "read utime2 stime2 < <(" + awkPath + " \"{print $14, $15}\" /proc/$PID/stat) && " +
                 "delta=$(( (utime2 + stime2) - (utime1 + stime1) )) && " +
-                "cpu=$(/system/bin/awk -v d=$delta -v h=$HZ 'BEGIN { printf \"%.1f\", (d/h)*100 }') && " +
+                "cpu=$(" + awkPath + " -v d=$delta -v h=$HZ 'BEGIN { printf \"%.1f\", (d/h)*100 }') && " +
                 "echo $cpu" +
                 "'";
 
-        // 4️⃣ Execute shell command
-        java.lang.Process process = Runtime.getRuntime().exec(cmd);
+            java.lang.Process process = Runtime.getRuntime().exec(cmd);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line = reader.readLine();
+            reader.close();
+            process.waitFor();
 
-        // 5️⃣ Read output
-        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-        String line = reader.readLine();
-        reader.close();
-        process.waitFor();
-
-        if (line != null && !line.isEmpty()) {
-            return "CPU: " + line + "%";
-        } else {
+            if (line != null && !line.isEmpty()) {
+                return "CPU: " + line + "%";
+            } else {
+                return "CPU: N/A";
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "CPU usage error", e);
             return "CPU: N/A";
         }
-    } catch (Exception e) {
-        return "CPU: N/A";
     }
-}
+
     /* ===================== GPU NAME ===================== */
 
     private String detectGpuName() {
@@ -419,7 +362,6 @@ private String getCpuUsage() {
         if (fpsReaderThread != null) fpsReaderThread.interrupt();
         if (hudView != null) windowManager.removeView(hudView);
         if (scheduler != null) scheduler.shutdownNow();
-        closeWriters();
         super.onDestroy();
     }
 

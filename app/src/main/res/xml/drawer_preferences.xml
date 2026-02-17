@@ -28,7 +28,7 @@
             
         <SwitchPreferenceCompat
     android:key="hud_enabled"
-    android:title="Enable performance HUD"
+    android:title="Enable HUD"
     android:summary="Show FPS, CPU, memory overlay"
     android:defaultValue="false"
     app:iconSpaceReserved="false" />
