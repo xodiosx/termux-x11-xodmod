@@ -1480,8 +1480,8 @@ isResumed = true;
 */
         super.onPause();
         isResumed = false;
-        finish();
-        prepareToExit();
+     //   finish();
+      //  prepareToExit();
     if (isBound && hudService != null) {
         hudService.detach();
     }

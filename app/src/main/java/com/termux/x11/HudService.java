@@ -1,10 +1,18 @@
 package com.termux.x11;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
-import android.os.*;
+import android.graphics.Typeface;
+import android.os.Binder;
+import android.os.Build;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -348,7 +356,7 @@ public class HudService extends Service {
     /* ===================== MEMORY ===================== */
 
     private String getMemoryInfo() {
-        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
         long used = mi.totalMem - mi.availMem;
@@ -356,7 +364,7 @@ public class HudService extends Service {
     }
 
     private String getTotalRam() {
-        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
         return formatBytes(mi.totalMem);
@@ -364,7 +372,7 @@ public class HudService extends Service {
 
     private long getAvailableMemoryMB() {
         try {
-            ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
             ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
             am.getMemoryInfo(mi);
             return mi.availMem / (1024 * 1024); // MB
