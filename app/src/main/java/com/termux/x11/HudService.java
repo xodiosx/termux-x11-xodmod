@@ -143,29 +143,45 @@ private final IBinder binder = new LocalBinder();
     }
 
     private SpannableString buildHudText() {
-        String cpu = getCpuUsage();
-        String mem = getMemoryInfo();
-        long availMB = getAvailableMemoryMB();
+    String cpuUsage = getCpuUsage();
+    String mem = getMemoryInfo();
+    String temp = getCpuTemp();
+    float tempVal = getCpuTempValue();
+    long availMB = getAvailableMemoryMB();
 
-        String full =
-                fpsText + " | " +
-                cpu + " | " +
-                gpuName + " | " +
-                mem;
+    String full =
+            fpsText + " | " +
+            temp + " | " +
+            cpuUsage + " | " +
+            gpuName + " | " +
+            mem;
 
-        SpannableString s = new SpannableString(full);
+    SpannableString s = new SpannableString(full);
 
-        // FPS red if <10
-        color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
-        color(s, cpu, Color.YELLOW);
-        color(s, gpuName, Color.MAGENTA);
-        // Memory red if available < 800 MB
-        int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
-        color(s, mem, memColor);
-
-        return s;
+    // FPS red if <10
+    color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
+    // Temperature color based on value
+    int tempColor;
+    if (tempVal < 0) {
+        tempColor = Color.LTGRAY; // unavailable
+    } else if (tempVal > 70) {
+        tempColor = Color.RED;
+    } else if (tempVal > 40) {
+        tempColor = Color.rgb(255, 165, 0); // orange
+    } else {
+        tempColor = Color.CYAN;
     }
+    color(s, temp, tempColor);
+    // CPU usage always yellow (could add threshold later if desired)
+    color(s, cpuUsage, Color.YELLOW);
+    // GPU name always magenta
+    color(s, gpuName, Color.MAGENTA);
+    // Memory red if available < 800 MB
+    int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
+    color(s, mem, memColor);
 
+    return s;
+}
     private void color(SpannableString s, String part, int color) {
         int start = s.toString().indexOf(part);
         if (start >= 0) {
@@ -339,7 +355,40 @@ private final IBinder binder = new LocalBinder();
         return String.format(Locale.US, "%.1f %sB",
                 b / Math.pow(1024, e), "KMGTPE".charAt(e - 1));
     }
+    /* ===================== CPU TEMPERATURE ===================== */
+    
+    // CPU temperature reading
+private String getCpuTemp() {
+    for (int i = 0; i < 10; i++) {
+        try {
+            String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
+            BufferedReader br = new BufferedReader(new FileReader(path));
+            int temp = Integer.parseInt(br.readLine().trim());
+            br.close();
+            if (temp > 10000) { // typical value is in millidegrees
+                return String.format("CPU: %.1f°C", temp / 1000f);
+            }
+        } catch (Exception ignored) {}
+    }
+    return "CPU: N/A";
+}
 
+// Get numeric temperature in °C, or -1 if unavailable
+private float getCpuTempValue() {
+    for (int i = 0; i < 10; i++) {
+        try {
+            String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
+            BufferedReader br = new BufferedReader(new FileReader(path));
+            int temp = Integer.parseInt(br.readLine().trim());
+            br.close();
+            if (temp > 10000) {
+                return temp / 1000f;
+            }
+        } catch (Exception ignored) {}
+    }
+    return -1;
+}
+    
     /* ===================== GPU ===================== */
 
     private String detectGpuName() {
