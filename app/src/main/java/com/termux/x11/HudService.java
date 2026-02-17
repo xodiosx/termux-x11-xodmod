@@ -54,7 +54,14 @@ public class HudService extends Service {
     private String totalRam;
 
     /* ===================== SERVICE ===================== */
+public class LocalBinder extends Binder {
+    public HudService getService() {
+        return HudService.this;
+    }
+}
 
+
+private final IBinder binder = new LocalBinder();
     @Override
     public void onCreate() {
         super.onCreate();
@@ -172,7 +179,11 @@ public class HudService extends Service {
 
     private void startFpsReader() {
         fpsThread = new Thread(() -> {
+        
             try {
+            //cleaning logs
+            Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
+
                 ProcessBuilder pb = new ProcessBuilder(
                         "logcat", "-s", "LorieNative:I", "-v", "brief"
                 );
@@ -387,8 +398,10 @@ public class HudService extends Service {
         super.onDestroy();
     }
 
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
+
+
+@Override
+public IBinder onBind(Intent intent) {
+    return binder;
+}
 }

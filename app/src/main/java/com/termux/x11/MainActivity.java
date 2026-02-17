@@ -206,6 +206,63 @@ private DrawerLayout drawerLayout;
         private final SharedPreferences.OnSharedPreferenceChangeListener preferencesChangedListener = (__, key) -> onPreferencesChanged(key);
     private static boolean softKeyboardShown = false;
 
+// hud
+// Inside MainActivity class
+
+private HudService hudService;
+private boolean isBound = false;
+
+private ServiceConnection hudConnection = new ServiceConnection() {
+    @Override
+    public void onServiceConnected(ComponentName name, IBinder service) {
+        HudService.LocalBinder binder = (HudService.LocalBinder) service;
+        hudService = binder.getService();
+        // If activity is resumed, attach immediately
+        if (isResumed) {
+            hudService.attachToActivity(MainActivity.this);
+        }
+        isBound = true;
+    }
+
+    @Override
+    public void onServiceDisconnected(ComponentName name) {
+        isBound = false;
+        hudService = null;
+    }
+};
+
+private boolean isResumed = false;
+
+// Call this when the HUD preference is enabled
+public void startHudService() {
+    Intent intent = new Intent(this, HudService.class);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        startForegroundService(intent);
+    } else {
+        startService(intent);
+    }
+    bindService(intent, hudConnection, Context.BIND_AUTO_CREATE);
+}
+
+// Call this when the HUD preference is disabled
+public void stopHudService() {
+    if (isBound) {
+        unbindService(hudConnection);
+        isBound = false;
+    }
+    Intent intent = new Intent(this, HudService.class);
+    stopService(intent);
+}
+
+// Called from onStart to start HUD if preference is enabled
+private void startHudIfEnabled() {
+    SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+    boolean hudEnabled = prefs.getBoolean("hud_enabled", false);
+    if (hudEnabled) {
+        startHudService();
+    }
+}
+
 
  //////////////////////////////////////////////////////////////////
 private void checkConnectedControllers() {
@@ -1381,12 +1438,33 @@ mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATI
         
     }
 
+
+@Override
+protected void onStart() {
+    super.onStart();
+    startHudIfEnabled();   // start & bind if enabled
+}
+
+
+@Override
+protected void onStop() {
+    super.onStop();
+    // Unbind but do NOT stop service – let it run in background
+    if (isBound) {
+        unbindService(hudConnection);
+        isBound = false;
+    }
+}
+
     @Override
     public void onResume() {
         super.onResume();
    //     mNotification = buildNotification();
  //       mNotificationManager.notify(mNotificationId, mNotification);
-
+isResumed = true;
+    if (isBound && hudService != null) {
+        hudService.attachToActivity(this);
+    }
         setTerminalToolbarView();
         getLorieView().requestFocus();
     }
@@ -1400,6 +1478,12 @@ mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATI
                 mNotificationManager.cancel(mNotificationId);
 */
         super.onPause();
+        isResumed = false;
+        finish();
+        prepareToExit();
+    if (isBound && hudService != null) {
+        hudService.detach();
+    }
     }
 
     public LorieView getLorieView() {
@@ -1916,39 +2000,30 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
     }
 
     private void startHudService() {
-        // Check overlay permission on Android M+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
-            // Request permission
-            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:" + activity.getPackageName()));
-            activity.startActivityForResult(intent, 1001);
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
+        // Request permission
+        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:" + activity.getPackageName()));
+        activity.startActivityForResult(intent, 1001);
 
-            // Revert the switch state because permission not granted
-            SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
-            if (hudSwitch != null) {
-                hudSwitch.setChecked(false);
-            }
+        // Revert the switch
+        SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
+        if (hudSwitch != null) hudSwitch.setChecked(false);
 
-            Toast.makeText(activity, "Please grant overlay permission", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Intent serviceIntent = new Intent(activity, HudService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            activity.startForegroundService(serviceIntent);
-        } else {
-            activity.startService(serviceIntent);
-        }
-        Toast.makeText(activity, "HUD started", Toast.LENGTH_SHORT).show();
-        activity.drawerLayout.closeDrawer(GravityCompat.START);
+        Toast.makeText(activity, "Please grant overlay permission", Toast.LENGTH_LONG).show();
+        return;
     }
 
-    private void stopHudService() {
-        Intent serviceIntent = new Intent(activity, HudService.class);
-        activity.stopService(serviceIntent);
-        Toast.makeText(activity, "HUD stopped", Toast.LENGTH_SHORT).show();
-        activity.drawerLayout.closeDrawer(GravityCompat.START);
-    }
+    activity.startHudService();   // <-- use activity's method
+    Toast.makeText(activity, "HUD started", Toast.LENGTH_SHORT).show();
+    activity.drawerLayout.closeDrawer(GravityCompat.START);
+}
+
+private void stopHudService() {
+    activity.stopHudService();    // <-- use activity's method
+    Toast.makeText(activity, "HUD stopped", Toast.LENGTH_SHORT).show();
+    activity.drawerLayout.closeDrawer(GravityCompat.START);
+}
 
     private void openHelpUrl() {
         try {
