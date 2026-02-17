@@ -1,18 +1,18 @@
 package com.termux.x11;
 
-import android.app.*;
-import android.content.*;
-import android.graphics.*;
+import android.app.Activity;
+import android.app.Service;
+import android.content.Intent;
+import android.graphics.Color;
 import android.os.*;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.util.Log;
-import android.view.*;
+import android.view.Gravity;
+import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.FrameLayout;
-
-import androidx.core.app.NotificationCompat;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -28,7 +28,6 @@ import java.util.concurrent.TimeUnit;
 public class HudService extends Service {
 
     private static final String TAG = "HudService";
-    private static final String CHANNEL_ID = "hud_channel";
 
     /* ---------- ACTIVITY ATTACHMENT ---------- */
     private WeakReference<Activity> activityRef;
@@ -66,15 +65,9 @@ public class HudService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-
         mainHandler = new Handler(Looper.getMainLooper());
-
-        createNotificationChannel();
-        startForeground(1, buildNotification());
-
         gpuName = detectGpuName();
         totalRam = getTotalRam();
-
         startFpsReader();
         startHudLoop();
     }
@@ -83,7 +76,6 @@ public class HudService extends Service {
 
     public void attachToActivity(Activity activity) {
         detach();
-
         activityRef = new WeakReference<>(activity);
 
         mainHandler.post(() -> {
@@ -102,13 +94,11 @@ public class HudService extends Service {
                             FrameLayout.LayoutParams.WRAP_CONTENT,
                             Gravity.TOP | Gravity.START
                     );
-
             params.leftMargin = 8;
             params.topMargin = 0;
 
             ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
             decor.addView(hudView, params);
-
             attached = true;
             Log.d(TAG, "HUD attached to activity");
         });
@@ -122,7 +112,6 @@ public class HudService extends Service {
 
             ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
             decor.removeView(hudView);
-
             hudView = null;
             attached = false;
             Log.d(TAG, "HUD detached");
@@ -415,26 +404,6 @@ public class HudService extends Service {
             return br.readLine();
         } catch (Exception e) {
             return null;
-        }
-    }
-
-    /* ===================== NOTIFICATION ===================== */
-
-    private Notification buildNotification() {
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("HUD active")
-                .setSmallIcon(android.R.drawable.presence_online)
-                .build();
-    }
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= 26) {
-            NotificationChannel ch =
-                    new NotificationChannel(
-                            CHANNEL_ID, "HUD",
-                            NotificationManager.IMPORTANCE_LOW);
-            getSystemService(NotificationManager.class)
-                    .createNotificationChannel(ch);
         }
     }
 
