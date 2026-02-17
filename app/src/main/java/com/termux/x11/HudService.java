@@ -1,6 +1,5 @@
 package com.termux.x11;
 
-import java.util.Locale;
 import android.app.*;
 import android.content.*;
 import android.graphics.*;
@@ -11,43 +10,48 @@ import android.text.style.ForegroundColorSpan;
 import android.util.Log;
 import android.view.*;
 import android.widget.TextView;
-import java.lang.ref.WeakReference;
+
 import androidx.core.app.NotificationCompat;
 
-import java.io.*;
-import java.util.concurrent.*;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
+import java.lang.ref.WeakReference;
+import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class HudService extends Service {
 
-    private static final String CHANNEL_ID = "hud_channel";
-    private static final int NOTIFICATION_ID = 1;
     private static final String TAG = "HudService";
+    private static final String CHANNEL_ID = "hud_channel";
 
-    // Binder for activity communication
-    private final IBinder binder = new LocalBinder();
+    /* ---------- ACTIVITY ATTACHMENT ---------- */
+    private WeakReference<Activity> activityRef;
+    private TextView hudView;
+    private boolean attached = false;
 
-    // Activity reference (weak to avoid leaks)
-    private WeakReference<Activity> targetActivity = null;
-    private TextView hudView = null;
-    private boolean isAttached = false;
-
+    /* ---------- THREADING ---------- */
     private ScheduledExecutorService scheduler;
     private Handler mainHandler;
 
-    /* ---------- FPS STATE ---------- */
-    private volatile String fpsValue = "FPS: N/A";
-    private volatile float fpsNumeric = -1f; // for threshold coloring
-    private Thread fpsReaderThread;
-    private volatile boolean fpsReaderRunning = true;
+    /* ---------- FPS ---------- */
+    private volatile String fpsText = "FPS: N/A";
+    private volatile float fpsValue = -1f;
+    private Thread fpsThread;
+    private volatile boolean fpsRunning = true;
 
-    /* ---------- CPU STATE ---------- */
-    // (no changes needed)
+    /* ---------- CPU ---------- */
+    private long lastCpuTime = 0;
+    private long lastWallTime = 0;
 
-    /* ---------- GPU ---------- */
-    private String gpuName = "GPU: N/A";
+    /* ---------- GPU / MEM ---------- */
+    private String gpuName = "GPU: Unknown";
+    private String totalRam;
 
-    /* ---------- MEMORY ---------- */
-    private String totalRAM = null;
+    /* ===================== SERVICE ===================== */
 
     @Override
     public void onCreate() {
@@ -56,393 +60,271 @@ public class HudService extends Service {
         mainHandler = new Handler(Looper.getMainLooper());
 
         createNotificationChannel();
-        startForeground(NOTIFICATION_ID, buildNotification());
+        startForeground(1, buildNotification());
 
         gpuName = detectGpuName();
-        totalRAM = getTotalRAM();
+        totalRam = getTotalRam();
 
-        // Start background threads (they will update the UI only when attached)
-        startFpsReaderThread();
-        startStatsLoop();
+        startFpsReader();
+        startHudLoop();
     }
 
-    /**
-     * Called by the main activity to attach the HUD to its window.
-     */
+    /* ===================== ACTIVITY BINDING ===================== */
+
     public void attachToActivity(Activity activity) {
-        if (targetActivity != null && targetActivity.get() == activity && isAttached) {
-            return; // already attached to this activity
-        }
+        detach();
 
-        // Remove any previously attached HUD
-        removeHudView();
+        activityRef = new WeakReference<>(activity);
 
-        targetActivity = new WeakReference<>(activity);
-
-        // Create and attach the HUD view on UI thread
         mainHandler.post(() -> {
-            if (targetActivity == null || targetActivity.get() == null) return;
-            Activity act = targetActivity.get();
+            Activity act = activityRef.get();
+            if (act == null) return;
 
-            // Create the HUD TextView
             hudView = new TextView(act);
-            hudView.setTextSize(12);
-            hudView.setPadding(10, 4, 10, 4);
             hudView.setTypeface(Typeface.MONOSPACE);
-            hudView.setBackgroundColor(Color.argb(140, 0, 0, 0));
+            hudView.setTextSize(12);
+            hudView.setPadding(12, 6, 12, 6);
+            hudView.setBackgroundColor(Color.argb(160, 0, 0, 0));
 
-            // Use activity's WindowManager with its token
-            WindowManager wm = act.getWindowManager();
-            WindowManager.LayoutParams params = new WindowManager.LayoutParams(
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.WRAP_CONTENT,
-                    WindowManager.LayoutParams.TYPE_APPLICATION_PANEL, // attaches to activity
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    PixelFormat.TRANSLUCENT
-            );
+            FrameLayout.LayoutParams params =
+                    new FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            Gravity.TOP | Gravity.START
+                    );
 
-            // Critical: use the activity's window token
-            params.token = act.getWindow().getDecorView().getWindowToken();
-            params.gravity = Gravity.TOP | Gravity.START;
-            params.x = 5;
-            params.y = 0;
+            params.leftMargin = 8;
+            params.topMargin = 0;
 
-            wm.addView(hudView, params);
-            isAttached = true;
+            ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
+            decor.addView(hudView, params);
 
-            Log.d(TAG, "HUD attached to activity window");
+            attached = true;
+            Log.d(TAG, "HUD attached to activity");
         });
     }
 
-    /**
-     * Remove the HUD view from its current window.
-     */
-    private void removeHudView() {
-        if (hudView != null && isAttached && targetActivity != null) {
-            Activity act = targetActivity.get();
-            if (act != null && !act.isFinishing()) {
-                try {
-                    WindowManager wm = act.getWindowManager();
-                    wm.removeView(hudView);
-                } catch (Exception e) {
-                    Log.e(TAG, "Error removing HUD view", e);
-                }
-            }
+    public void detach() {
+        mainHandler.post(() -> {
+            if (!attached || hudView == null) return;
+            Activity act = activityRef != null ? activityRef.get() : null;
+            if (act == null) return;
+
+            ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
+            decor.removeView(hudView);
+
             hudView = null;
-            isAttached = false;
-        }
+            attached = false;
+            Log.d(TAG, "HUD detached");
+        });
     }
 
-    /* ===================== MAIN LOOP ===================== */
+    /* ===================== HUD UPDATE LOOP ===================== */
 
-    private void startStatsLoop() {
+    private void startHudLoop() {
         scheduler = Executors.newSingleThreadScheduledExecutor();
         scheduler.scheduleAtFixedRate(() -> {
-            // Build HUD text with dynamic colors
-            SpannableString hudText = buildColoredHud();
-
-            // Update the TextView if attached
+            SpannableString text = buildHudText();
             mainHandler.post(() -> {
-                if (hudView != null && isAttached) {
-                    hudView.setText(hudText);
+                if (attached && hudView != null) {
+                    hudView.setText(text);
                 }
             });
         }, 0, 2, TimeUnit.SECONDS);
     }
 
-    /* ===================== HUD TEXT with Dynamic Colors ===================== */
+    private SpannableString buildHudText() {
+    String cpu = getCpuUsage();
+    String mem = getMemoryInfo();
+    long availMB = getAvailableMemoryMB();
 
-    private SpannableString buildColoredHud() {
-        String fps = fpsValue;
-        String temp = getCpuTemp();
-        String cpu = getCpuUsage();
-        String mem = getMemoryInfo();
-        String gpu = gpuName;
+    String full = fpsText + " | " + cpu + " | " + gpuName + " | " + mem;
+    SpannableString s = new SpannableString(full);
 
-        String full = fps + " | " + temp + " | " + cpu + " | " + gpu + " | " + mem;
-        SpannableString s = new SpannableString(full);
+    // FPS red if <10
+    color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
+    color(s, cpu, Color.YELLOW);
+    color(s, gpuName, Color.MAGENTA);
+    // Memory red if available < 800 MB
+    int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
+    color(s, mem, memColor);
 
-        // Color each part; thresholds override default colors
-        colorPart(s, fps, getFpsColor());
-        colorPart(s, temp, Color.CYAN);
-        colorPart(s, cpu, Color.YELLOW);
-        colorPart(s, gpu, Color.MAGENTA);
-        colorPart(s, mem, getMemoryColor());
+    return s;
+}
 
-        return s;
-    }
-
-    private int getFpsColor() {
-        // fpsNumeric is updated in parseFpsLine()
-        if (fpsNumeric >= 0 && fpsNumeric < 10) {
-            return Color.RED;
-        }
-        return Color.GREEN; // default
-    }
-
-    private int getMemoryColor() {
-        long availableMB = getAvailableMemoryMB();
-        if (availableMB >= 0 && availableMB < 800) {
-            return Color.RED;
-        }
-        return Color.LTGRAY; // default
-    }
-
-    private void colorPart(SpannableString s, String part, int color) {
+    private void color(SpannableString s, String part, int color) {
         int start = s.toString().indexOf(part);
         if (start >= 0) {
-            s.setSpan(new ForegroundColorSpan(color), start,
-                    start + part.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            s.setSpan(new ForegroundColorSpan(color),
+                    start, start + part.length(),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
     }
 
-    /* ===================== BINARY SEARCH ===================== */
+    /* ===================== FPS (LOGCAT) ===================== */
 
-    private String findBinary(String binaryName) {
-        File customBin = new File(getFilesDir(), "usr/bin/" + binaryName);
-        if (customBin.exists() && customBin.canExecute()) {
-            Log.d(TAG, "Found " + binaryName + " in app data: " + customBin.getAbsolutePath());
-            return customBin.getAbsolutePath();
-        }
-        String[] systemPaths = {
-            "/system/bin/" + binaryName,
-            "/system/xbin/" + binaryName,
-            "/bin/" + binaryName,
-            "/vendor/bin/" + binaryName
-        };
-        for (String path : systemPaths) {
-            File f = new File(path);
-            if (f.exists() && f.canExecute()) {
-                Log.d(TAG, "Found system " + binaryName + ": " + path);
-                return path;
-            }
-        }
-        Log.d(TAG, "Binary " + binaryName + " not found");
-        return null;
-    }
-
-    /* ===================== FPS READER ===================== */
-
-    private void startFpsReaderThread() {
-        fpsReaderRunning = true;
-        fpsReaderThread = new Thread(() -> {
-            java.lang.Process process = null;  // fully qualified
-            BufferedReader reader = null;
-            String grepPath = findBinary("grep");
-
+    private void startFpsReader() {
+        fpsThread = new Thread(() -> {
             try {
-                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
-
-                ProcessBuilder pb;
-                if (grepPath != null) {
-                    String logcatCmd = "logcat -s LorieNative:I -v time";
-                    String grepCmd = grepPath + " --line-buffered \"FPS\"";
-                    String fullCmd = logcatCmd + " | " + grepCmd;
-                    pb = new ProcessBuilder("sh", "-c", fullCmd);
-                } else {
-                    pb = new ProcessBuilder("logcat", "-s", "LorieNative:I", "-v", "time");
-                }
-
+                ProcessBuilder pb = new ProcessBuilder(
+                        "logcat", "-s", "LorieNative:I", "-v", "brief"
+                );
                 pb.redirectErrorStream(true);
-                process = pb.start();
-                reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+                java.lang.Process p = pb.start();
+
+                BufferedReader br =
+                        new BufferedReader(new InputStreamReader(p.getInputStream()));
 
                 String line;
-                while (fpsReaderRunning && (line = reader.readLine()) != null) {
-                    if (line.contains("FPS")) {
-                        parseFpsLine(line);
-                    }
+                while (fpsRunning && (line = br.readLine()) != null) {
+                    if (!line.contains("FPS")) continue;
+                    parseFps(line);
                 }
             } catch (Exception e) {
-                Log.e(TAG, "Error in FPS reader thread", e);
-                fpsValue = "FPS: error";
-                fpsNumeric = -1;
-            } finally {
-                if (reader != null) try { reader.close(); } catch (IOException ignored) {}
-                if (process != null) process.destroy();
+                Log.e(TAG, "FPS reader error", e);
             }
-        }, "FPS-Logcat-Reader");
-        fpsReaderThread.setDaemon(true);
-        fpsReaderThread.start();
+        }, "FPS-Reader");
+
+        fpsThread.setDaemon(true);
+        fpsThread.start();
     }
 
-    private void parseFpsLine(String line) {
+    private void parseFps(String line) {
         int idx = line.lastIndexOf('=');
-        if (idx != -1) {
-            String afterEq = line.substring(idx + 1).trim();
-            String[] parts = afterEq.split("\\s+");
-            if (parts.length > 0) {
-                String numStr = parts[0];
-                fpsValue = "FPS: " + numStr;
-                try {
-                    fpsNumeric = Float.parseFloat(numStr);
-                } catch (NumberFormatException e) {
-                    fpsNumeric = -1;
-                }
-                Log.d(TAG, "Updated FPS: " + fpsValue);
-            }
-        }
+        if (idx < 0) return;
+
+        String num = line.substring(idx + 1).replace("FPS", "").trim();
+        try {
+            fpsValue = Float.parseFloat(num);
+            fpsText = "FPS: " + num;
+        } catch (Exception ignored) {}
     }
 
-    /* ===================== CPU TEMP ===================== */
-
-    private String getCpuTemp() {
-        for (int i = 0; i < 10; i++) {
-            try {
-                String path = "/sys/class/thermal/thermal_zone" + i + "/temp";
-                BufferedReader br = new BufferedReader(new FileReader(path));
-                int temp = Integer.parseInt(br.readLine().trim());
-                br.close();
-                if (temp > 10000) {
-                    return String.format("CPU: %.1f°C", temp / 1000f);
-                }
-            } catch (Exception ignored) {}
-        }
-        return "CPU: N/A";
-    }
-
-    /* ===================== CPU USAGE ===================== */
+    /* ===================== CPU USAGE (NO SHELL) ===================== */
 
     private String getCpuUsage() {
-        try {
-            String shPath = findBinary("sh");
-            String awkPath = findBinary("awk");
-            if (shPath == null || awkPath == null) {
-                return "CPU: N/A";
+        try (BufferedReader br = new BufferedReader(new FileReader("/proc/self/stat"))) {
+            String[] t = br.readLine().split("\\s+");
+
+            long utime = Long.parseLong(t[13]);
+            long stime = Long.parseLong(t[14]);
+            long cpuTime = utime + stime;
+            long now = SystemClock.elapsedRealtime();
+
+            if (lastWallTime == 0) {
+                lastCpuTime = cpuTime;
+                lastWallTime = now;
+                return "CPU: ...";
             }
 
-            int pid = android.os.Process.myPid();
-            int hz = 100;
+            long dCpu = cpuTime - lastCpuTime;
+            long dTime = now - lastWallTime;
 
-            String cmd = shPath + " -c '" +
-                "PID=" + pid + " && " +
-                "HZ=" + hz + " && " +
-                "read utime1 stime1 < <(" + awkPath + " \"{print $14, $15}\" /proc/$PID/stat) && " +
-                "sleep 1 && " +
-                "read utime2 stime2 < <(" + awkPath + " \"{print $14, $15}\" /proc/$PID/stat) && " +
-                "delta=$(( (utime2 + stime2) - (utime1 + stime1) )) && " +
-                "cpu=$(" + awkPath + " -v d=$delta -v h=$HZ 'BEGIN { printf \"%.1f\", (d/h)*100 }') && " +
-                "echo $cpu" +
-                "'";
+            lastCpuTime = cpuTime;
+            lastWallTime = now;
 
-            java.lang.Process process = Runtime.getRuntime().exec(cmd); // fully qualified
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line = reader.readLine();
-            reader.close();
-            process.waitFor();
+            float usage = (dCpu * 100f) / (dTime * 100f);
+            return String.format(Locale.US, "CPU: %.1f%%", usage);
 
-            if (line != null && !line.isEmpty()) {
-                return "CPU: " + line + "%";
-            } else {
-                return "CPU: N/A";
-            }
         } catch (Exception e) {
-            Log.e(TAG, "CPU usage error", e);
             return "CPU: N/A";
         }
     }
 
-    /* ===================== GPU NAME ===================== */
+    /* ===================== MEMORY ===================== */
+
+    private String getMemoryInfo() {
+        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        long used = mi.totalMem - mi.availMem;
+        return "MEM: " + formatBytes(used) + " / " + totalRam;
+    }
+
+    private String getTotalRam() {
+        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        return formatBytes(mi.totalMem);
+    }
+
+    private String formatBytes(long b) {
+        int e = (int) (Math.log(b) / Math.log(1024));
+        return String.format(Locale.US, "%.1f %sB",
+                b / Math.pow(1024, e), "KMGTPE".charAt(e - 1));
+    }
+
+  private long getAvailableMemoryMB() {
+    try {
+        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mi);
+        return mi.availMem / (1024 * 1024); // MB
+    } catch (Exception e) {
+        return -1;
+    }
+}
+    
+        /* ===================== GPU ===================== */
 
     private String detectGpuName() {
-        String[] props = { "ro.hardware.vulkan", "ro.hardware.egl", "ro.board.platform" };
+        String[] props = {
+                "ro.hardware.vulkan",
+                "ro.hardware.egl",
+                "ro.board.platform"
+        };
         for (String p : props) {
             String v = getProp(p);
-            if (v != null && !v.isEmpty()) return "GPU: " + v;
+            if (v != null && !v.isEmpty())
+                return "GPU: " + v;
         }
         return "GPU: Unknown";
     }
 
     private String getProp(String key) {
         try {
-            java.lang.Process p = Runtime.getRuntime().exec(new String[]{"getprop", key}); // fully qualified
-            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+            java.lang.Process p =
+                    Runtime.getRuntime().exec(new String[]{"getprop", key});
+            BufferedReader br = new BufferedReader(
+                    new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
             return null;
         }
     }
 
-    /* ===================== MEMORY ===================== */
-
-    private String getTotalRAM() {
-        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-        activityManager.getMemoryInfo(memoryInfo);
-        return formatBytes(memoryInfo.totalMem);
-    }
-
-    private String getAvailableRAM() {
-        ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-        activityManager.getMemoryInfo(memoryInfo);
-        long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
-        return formatBytes(usedMem);
-    }
-
-    /** Returns available memory in MB, or -1 if unable. */
-    private long getAvailableMemoryMB() {
-        try {
-            ActivityManager activityManager = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-            ActivityManager.MemoryInfo memoryInfo = new ActivityManager.MemoryInfo();
-            activityManager.getMemoryInfo(memoryInfo);
-            long availableBytes = memoryInfo.availMem;
-            return availableBytes / (1024 * 1024); // MB
-        } catch (Exception e) {
-            return -1;
-        }
-    }
-
-    private String formatBytes(long bytes) {
-        if (bytes < 1024) return bytes + " B";
-        int exp = (int) (Math.log(bytes) / Math.log(1024));
-        String pre = "KMGTPE".charAt(exp-1) + "";
-        return String.format(Locale.US, "%.1f %sB", bytes / Math.pow(1024, exp), pre);
-    }
-
-    private String getMemoryInfo() {
-        if (totalRAM == null) totalRAM = getTotalRAM();
-        return "MEM: " + getAvailableRAM() + " / " + totalRAM;
-    }
-
     /* ===================== NOTIFICATION ===================== */
-
-    private void createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                    CHANNEL_ID, "HUD Service", NotificationManager.IMPORTANCE_LOW);
-            getSystemService(NotificationManager.class).createNotificationChannel(channel);
-        }
-    }
 
     private Notification buildNotification() {
         return new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("HUD active")
-                .setContentText("System monitor overlay running")
                 .setSmallIcon(android.R.drawable.presence_online)
                 .build();
     }
 
-    /* ===================== BINDING ===================== */
-
-    public class LocalBinder extends Binder {
-        public HudService getService() {
-            return HudService.this;
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel ch =
+                    new NotificationChannel(
+                            CHANNEL_ID, "HUD",
+                            NotificationManager.IMPORTANCE_LOW);
+            getSystemService(NotificationManager.class)
+                    .createNotificationChannel(ch);
         }
+    }
+
+    /* ===================== CLEANUP ===================== */
+
+    @Override
+    public void onDestroy() {
+        fpsRunning = false;
+        detach();
+        if (scheduler != null) scheduler.shutdownNow();
+        super.onDestroy();
     }
 
     @Override
     public IBinder onBind(Intent intent) {
-        return binder;
-    }
-
-    @Override
-    public void onDestroy() {
-        fpsReaderRunning = false;
-        if (fpsReaderThread != null) fpsReaderThread.interrupt();
-        removeHudView();
-        if (scheduler != null) scheduler.shutdownNow();
-        super.onDestroy();
+        return null;
     }
 }
