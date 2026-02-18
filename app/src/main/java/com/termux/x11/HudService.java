@@ -237,9 +237,9 @@ private java.io.BufferedWriter openLogFile() throws Exception {
             String line;
             while (fpsRunning && (line = br.readLine()) != null) {
                 // Write EVERYTHING so we can see if it works
-                fileWriter.write(line);
-                fileWriter.newLine();
-                fileWriter.flush();
+               // fileWriter.write(line);
+               /// fileWriter.newLine();
+               // fileWriter.flush();
 
                 if (!line.contains("FPS")) continue;
                 parseFps(line);
