@@ -141,7 +141,7 @@
             android:name=".HudService"
             android:enabled="true"
             android:exported="false"
-            android:process=":x11"
+
             android:foregroundServiceType="mediaProjection"
             tools:targetApi="q" />
 
