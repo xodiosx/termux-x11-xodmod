@@ -222,10 +222,13 @@ private java.io.BufferedWriter openLogFile() throws Exception {
             );
             fileWriter = new BufferedWriter(new FileWriter(outFile, true));
 
+int pid = android.os.Process.myPid();
+
+
             String[] cmd = {
                     "/system/bin/sh",
                     "-c",
-                    "/system/bin/logcat"
+                    "/system/bin/logcat --pid=" + pid
             };
 
             Process p = Runtime.getRuntime().exec(cmd);
