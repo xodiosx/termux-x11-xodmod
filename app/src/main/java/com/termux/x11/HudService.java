@@ -213,61 +213,50 @@ private java.io.BufferedWriter openLogFile() throws Exception {
 
     private void startFpsReader() {
     fpsThread = new Thread(() -> {
-        java.io.BufferedWriter fileOut = null;
+        BufferedWriter fileWriter = null;
 
         try {
-            File logcatBin = ensureLogcatBinary();
-            fileOut = openLogFile();
-
-            fileOut.write("=== FPS LOG START ===\n");
-            fileOut.flush();
-
-            ProcessBuilder pb = new ProcessBuilder(
-                    logcatBin.getAbsolutePath(),
-                    "-v", "brief"
-                    // TEMPORARILY no filter
+            File outFile = new File(
+                    getExternalFilesDir(null),
+                    "log.txt"
             );
+            fileWriter = new BufferedWriter(new FileWriter(outFile, true));
 
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
+            String[] cmd = {
+                    "/system/bin/sh",
+                    "-c",
+                    "/system/bin/logcat -v brief | /system/bin/grep --line-buffered FPS"
+            };
 
-            BufferedReader br =
-                    new BufferedReader(new InputStreamReader(p.getInputStream()));
+            Process p = Runtime.getRuntime().exec(cmd);
+
+            BufferedReader br = new BufferedReader(
+                    new InputStreamReader(p.getInputStream())
+            );
 
             String line;
             while (fpsRunning && (line = br.readLine()) != null) {
+                // Write EVERYTHING so we can see if it works
+                fileWriter.write(line);
+                fileWriter.newLine();
+                fileWriter.flush();
 
-                // Write EVERYTHING for now
-                fileOut.write(line);
-                fileOut.write("\n");
-                fileOut.flush();
-
-                // Parse FPS if present
-                if (line.contains("FPS")) {
-                    parseFps(line);
-                }
+                if (!line.contains("FPS")) continue;
+                parseFps(line);
             }
 
         } catch (Exception e) {
-            try {
-                if (fileOut != null) {
-                    fileOut.write("ERROR: " + e + "\n");
-                    fileOut.flush();
-                }
-            } catch (Exception ignored) {}
-            Log.e(TAG, "FPS reader error", e);
-
+            Log.e(TAG, "FPS shell reader failed", e);
         } finally {
             try {
-                if (fileOut != null) fileOut.close();
+                if (fileWriter != null) fileWriter.close();
             } catch (Exception ignored) {}
         }
-    }, "FPS-Reader");
+    }, "FPS-Shell-Reader");
 
     fpsThread.setDaemon(true);
     fpsThread.start();
 }
-
     private void parseFps(String line) {
         int idx = line.lastIndexOf('=');
         if (idx < 0) return;
