@@ -4,8 +4,7 @@
     xmlns:tools="http://schemas.android.com/tools"
 
     android:installLocation="internalOnly"
-    android:sharedUserId="com.termux"
-    android:sharedUserLabel="XoDos">
+    android:sharedUserId="com.termux">
 
     <!-- ================= CORE TERMUX-LIKE PERMISSIONS ================= -->
 
