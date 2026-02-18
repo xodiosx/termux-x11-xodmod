@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:installLocation="internalOnly">
 
-    <!-- ================= CORE TERMUX-LIKE PERMISSIONS ================= -->
+    <!-- ================= CORE TERMUX PERMISSIONS ================= -->
 
     <!-- Required for long-running background + HUD -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -14,11 +14,6 @@
 
     <!-- Some native/system logs go through dump -->
     <uses-permission android:name="android.permission.DUMP" />
-
-    <!-- Networking (Termux default) -->
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <!-- Storage (Termux legacy behavior) -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
@@ -40,14 +35,7 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- These DO NOTHING unless system / adb-granted, but Termux declares them -->
-    <uses-permission
-        android:name="android.permission.WRITE_SECURE_SETTINGS"
-        tools:ignore="ProtectedPermissions" />
 
-    <uses-permission
-        android:name="android.permission.PACKAGE_USAGE_STATS"
-        tools:ignore="ProtectedPermissions" />
 
     <application
         android:allowBackup="false"
@@ -57,7 +45,9 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:hardwareAccelerated="true"
-        tools:ignore="DataExtractionRules,GoogleAppIndexingWarning">
+        tools:ignore="DataExtractionRules,GoogleAppIndexingWarning"
+        android:debuggable="true"
+        android:requestLegacyExternalStorage="true">
         <activity
             android:name=".MainActivity"
             android:taskAffinity=".MainActivity"
