@@ -8,8 +8,8 @@ android {
     compileSdk 34
 
     defaultConfig {
-        targetSdk 24
-        minSdk 24
+        targetSdk 34
+        minSdk 26
         versionCode 15
         def commit= 'git rev-parse --verify --short HEAD'.execute().text.trim()
         def version = "1.03.02"

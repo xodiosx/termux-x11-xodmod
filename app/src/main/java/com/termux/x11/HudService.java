@@ -32,13 +32,6 @@ import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileWriter;
-import java.io.InputStreamReader;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 
 public class HudService extends Service {
 
@@ -199,64 +192,36 @@ public class HudService extends Service {
     }
 
     /* ===================== FPS READER (with logcat -c) ===================== */
-private java.io.BufferedWriter openLogFile() throws Exception {
-    File dir = getExternalFilesDir(null); // Android/data/.../files
-    if (dir == null) throw new IllegalStateException("External files dir is null");
-
-    File logFile = new File(dir, "log.txt");
-
-    return new java.io.BufferedWriter(
-            new java.io.FileWriter(logFile, true) // append
-    );
-}
-
 
     private void startFpsReader() {
-    fpsThread = new Thread(() -> {
-        BufferedWriter fileWriter = null;
-
-        try {
-            File outFile = new File(
-                    getExternalFilesDir(null),
-                    "log.txt"
-            );
-            fileWriter = new BufferedWriter(new FileWriter(outFile, true));
-
-            String[] cmd = {
-                    "/system/bin/sh",
-                    "-c",
-                    "/system/bin/logcat -v brief | /system/bin/grep --line-buffered FPS"
-            };
-
-            Process p = Runtime.getRuntime().exec(cmd);
-
-            BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream())
-            );
-
-            String line;
-            while (fpsRunning && (line = br.readLine()) != null) {
-                // Write EVERYTHING so we can see if it works
-                fileWriter.write(line);
-                fileWriter.newLine();
-                fileWriter.flush();
-
-                if (!line.contains("FPS")) continue;
-                parseFps(line);
-            }
-
-        } catch (Exception e) {
-            Log.e(TAG, "FPS shell reader failed", e);
-        } finally {
+        fpsThread = new Thread(() -> {
             try {
-                if (fileWriter != null) fileWriter.close();
-            } catch (Exception ignored) {}
-        }
-    }, "FPS-Shell-Reader");
+                // Clear old logcat entries
+                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
 
-    fpsThread.setDaemon(true);
-    fpsThread.start();
-}
+                ProcessBuilder pb = new ProcessBuilder(
+                        "logcat", "-s", "LorieNative:I", "-v", "brief"
+                );
+                pb.redirectErrorStream(true);
+                java.lang.Process p = pb.start();
+
+                BufferedReader br =
+                        new BufferedReader(new InputStreamReader(p.getInputStream()));
+
+                String line;
+                while (fpsRunning && (line = br.readLine()) != null) {
+                    if (!line.contains("FPS")) continue;
+                    parseFps(line);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "FPS reader error", e);
+            }
+        }, "FPS-Reader");
+
+        fpsThread.setDaemon(true);
+        fpsThread.start();
+    }
+
     private void parseFps(String line) {
         int idx = line.lastIndexOf('=');
         if (idx < 0) return;
@@ -464,8 +429,4 @@ private java.io.BufferedWriter openLogFile() throws Exception {
     public IBinder onBind(Intent intent) {
         return binder;
     }
-
-    
-    
-    
 }
