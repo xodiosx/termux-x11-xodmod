@@ -225,7 +225,7 @@ private java.io.BufferedWriter openLogFile() throws Exception {
             String[] cmd = {
                     "/system/bin/sh",
                     "-c",
-                    "PATH=/system/bin exec /system/bin/logcat -v brief | /system/bin/grep --line-buffered FPS"
+                    "PATH=/system/bin exec /system/bin/logcat | /system/bin/grep --line-buffered FPS"
             };
 
             Process p = Runtime.getRuntime().exec(cmd);
