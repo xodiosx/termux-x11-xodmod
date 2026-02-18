@@ -225,7 +225,7 @@ private java.io.BufferedWriter openLogFile() throws Exception {
             String[] cmd = {
                     "/system/bin/sh",
                     "-c",
-                    "/system/bin/logcat -v brief | /system/bin/grep --line-buffered FPS"
+                    "PATH=/system/bin exec /system/bin/logcat -v brief | /system/bin/grep --line-buffered FPS"
             };
 
             Process p = Runtime.getRuntime().exec(cmd);
@@ -464,32 +464,7 @@ private java.io.BufferedWriter openLogFile() throws Exception {
     public IBinder onBind(Intent intent) {
         return binder;
     }
-    /// logcat 
-    private File ensureLogcatBinary() throws Exception {
-    File binDir = new File(getFilesDir(), "bin");
-    if (!binDir.exists()) binDir.mkdirs();
 
-    File logcat = new File(binDir, "logcat");
-
-    if (!logcat.exists()) {
-        try (java.io.InputStream in = getAssets().open("logcat");
-             java.io.FileOutputStream out = new java.io.FileOutputStream(logcat)) {
-
-            byte[] buf = new byte[8192];
-            int len;
-            while ((len = in.read(buf)) > 0) {
-                out.write(buf, 0, len);
-            }
-        }
-
-        Runtime.getRuntime()
-                .exec(new String[]{"chmod", "755", logcat.getAbsolutePath()})
-                .waitFor();
-    }
-
-    return logcat;
-}
-    
     
     
     
