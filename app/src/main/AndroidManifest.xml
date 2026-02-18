@@ -1,42 +1,102 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:installLocation="internalOnly">
 
+    android:installLocation="internalOnly"
+    android:sharedUserId="com.termux"
+    android:sharedUserLabel="XoDos">
+
+    <!-- ================= CORE TERMUX-LIKE PERMISSIONS ================= -->
+
+    <!-- Required for long-running background + HUD -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Needed for logcat visibility (effective only with shared UID / debuggable) -->
+    <uses-permission android:name="android.permission.READ_LOGS" />
+
+    <!-- Some native/system logs go through dump -->
+    <uses-permission android:name="android.permission.DUMP" />
+
+    <!-- Networking (Termux default) -->
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+    <!-- Storage (Termux legacy behavior) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+
+    <!-- Overlay / HUD -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-   <uses-permission android:name="android.permission.READ_LOGS" />
+
+    <!-- Notifications -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Battery survival -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!-- Audio / input parity with Termux -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <!-- These DO NOTHING unless system / adb-granted, but Termux declares them -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!-- ================= APPLICATION ================= -->
+
     <application
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
-        android:supportsRtl="true"
+        android:label="@string/app_name"
         android:theme="@style/AppTheme"
+        android:supportsRtl="true"
         android:hardwareAccelerated="true"
+
+        android:debuggable="true"
+        android:requestLegacyExternalStorage="true"
+
         tools:ignore="DataExtractionRules,GoogleAppIndexingWarning">
+
+        <!-- ================= MAIN ACTIVITY ================= -->
+
         <activity
             android:name=".MainActivity"
-            android:taskAffinity=".MainActivity"
             android:launchMode="singleInstance"
+            android:taskAffinity=".MainActivity"
+            android:exported="true"
             android:supportsPictureInPicture="true"
-            android:configChanges="fontScale|orientation|screenSize|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|screenLayout|touchscreen|uiMode|smallestScreenSize|density"
             android:resizeableActivity="true"
             android:windowSoftInputMode="stateHidden"
-            android:exported="true">
+            android:configChanges="fontScale|orientation|screenSize|keyboard|keyboardHidden|layoutDirection|locale|mcc|mnc|navigation|screenLayout|touchscreen|uiMode|smallestScreenSize|density">
+
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
             <intent-filter>
                 <category android:name="android.intent.category.SECONDARY_HOME" />
             </intent-filter>
-            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
-        <!--termux-x11-->
+
+        <!-- ================= TERMUX-X11 ACTIVITIES ================= -->
+
         <activity
             android:name="com.termux.x11.controller.ControlsEditorActivity"
             android:exported="false"
@@ -48,49 +108,52 @@
             android:exported="false"
             android:screenOrientation="sensor"
             android:theme="@style/AppTheme" />
+
         <activity
             android:name="com.termux.x11.controller.InputControllerActivity"
             android:exported="false"
             android:screenOrientation="sensor"
             android:theme="@style/AppTheme" />
 
-        <!-- Only one meta-data entry for multiple resumed activities -->
+        <!-- Allow multi-resume like Termux -->
         <meta-data
             android:name="android.allow_multiple_resumed_activities"
             android:value="true" />
 
+        <!-- Preferences -->
         <activity
-            android:theme="@style/Theme.AppCompat.DayNight"
-            android:excludeFromRecents="true"
             android:name=".LoriePreferences"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:resizeableActivity="true"
             android:taskAffinity=".LoriePreferences"
             android:supportsPictureInPicture="false"
-            android:resizeableActivity="true"
-            android:exported="true">
+            android:theme="@style/Theme.AppCompat.DayNight">
+
             <intent-filter>
                 <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
         </activity>
 
-        <!-- Samsung multi-display keep alive -->
-        <meta-data
-            android:name="com.samsung.android.multidisplay.keep_process_alive"
-            android:value="false" />
+        <!-- ================= HUD SERVICE ================= -->
 
-        <!-- HUD Service – single declaration -->
         <service
             android:name=".HudService"
             android:enabled="true"
             android:exported="false"
-            tools:targetApi="q" /> <!-- foregroundServiceType attribute omitted for broader compatibility; add if needed with tools:targetApi -->
+            android:process=":x11"
+            android:foregroundServiceType="mediaProjection"
+            tools:targetApi="q" />
 
-        <!-- KeyInterceptor accessibility service -->
+        <!-- ================= ACCESSIBILITY ================= -->
+
         <service
             android:name=".utils.KeyInterceptor"
             android:exported="true"
             android:label="Termux:X11 KeyInterceptor"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+
             <intent-filter>
                 <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
@@ -100,19 +163,29 @@
                 android:resource="@xml/accessibility_service_config" />
         </service>
 
-        <!-- Broadcast receiver for preferences -->
+        <!-- ================= RECEIVERS ================= -->
+
         <receiver
             android:name=".LoriePreferences$Receiver"
+            android:enabled="true"
             android:exported="true"
-            tools:ignore="ExportedReceiver"
-            android:enabled="true">
+            tools:ignore="ExportedReceiver">
+
             <intent-filter>
                 <action android:name="com.termux.x11.CHANGE_PREFERENCE" />
             </intent-filter>
         </receiver>
+
+        <!-- Samsung multi-display -->
+        <meta-data
+            android:name="com.samsung.android.multidisplay.keep_process_alive"
+            android:value="false" />
+
     </application>
 
+    <!-- Allow querying Termux -->
     <queries>
         <package android:name="com.termux" />
     </queries>
+
 </manifest>

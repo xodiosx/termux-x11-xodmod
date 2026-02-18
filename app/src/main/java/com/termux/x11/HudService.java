@@ -222,13 +222,10 @@ private java.io.BufferedWriter openLogFile() throws Exception {
             );
             fileWriter = new BufferedWriter(new FileWriter(outFile, true));
 
-int pid = android.os.Process.myPid();
-
-
             String[] cmd = {
                     "/system/bin/sh",
                     "-c",
-                    "/system/bin/logcat --pid=" + pid
+                    "/system/bin/logcat -v brief | /system/bin/grep --line-buffered FPS"
             };
 
             Process p = Runtime.getRuntime().exec(cmd);
