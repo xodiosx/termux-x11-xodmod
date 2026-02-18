@@ -32,6 +32,13 @@ import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.InputStreamReader;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 
 public class HudService extends Service {
 
@@ -192,16 +199,33 @@ public class HudService extends Service {
     }
 
     /* ===================== FPS READER (with logcat -c) ===================== */
+private java.io.BufferedWriter openLogFile() throws Exception {
+    File dir = getExternalFilesDir(null); // Android/data/.../files
+    if (dir == null) throw new IllegalStateException("External files dir is null");
+
+    File logFile = new File(dir, "log.txt");
+
+    return new java.io.BufferedWriter(
+            new java.io.FileWriter(logFile, true) // append
+    );
+}
+
 
     private void startFpsReader() {
     fpsThread = new Thread(() -> {
+        java.io.BufferedWriter fileOut = null;
+
         try {
             File logcatBin = ensureLogcatBinary();
+            fileOut = openLogFile();
+
+            fileOut.write("=== FPS LOG START ===\n");
+            fileOut.flush();
 
             ProcessBuilder pb = new ProcessBuilder(
                     logcatBin.getAbsolutePath(),
-                    "-v", "brief",
-                    "-s", "LorieNative:I"
+                    "-v", "brief"
+                    // TEMPORARILY no filter
             );
 
             pb.redirectErrorStream(true);
@@ -212,12 +236,31 @@ public class HudService extends Service {
 
             String line;
             while (fpsRunning && (line = br.readLine()) != null) {
-                if (!line.contains("FPS")) continue;
-                parseFps(line);
+
+                // Write EVERYTHING for now
+                fileOut.write(line);
+                fileOut.write("\n");
+                fileOut.flush();
+
+                // Parse FPS if present
+                if (line.contains("FPS")) {
+                    parseFps(line);
+                }
             }
 
         } catch (Exception e) {
+            try {
+                if (fileOut != null) {
+                    fileOut.write("ERROR: " + e + "\n");
+                    fileOut.flush();
+                }
+            } catch (Exception ignored) {}
             Log.e(TAG, "FPS reader error", e);
+
+        } finally {
+            try {
+                if (fileOut != null) fileOut.close();
+            } catch (Exception ignored) {}
         }
     }, "FPS-Reader");
 
