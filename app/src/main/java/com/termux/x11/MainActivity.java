@@ -430,7 +430,7 @@ return findViewById(R.id.display_terminal_toolbar_view_pager);
             // Use intent to communicate with Termux app
             Intent intent = new Intent();
             intent.setAction("com.termux.action.INSTALL_X11");
-            intent.setPackage("com.termux");
+            intent.setPackage("com.termux.x11");
             try {
                 activity.startActivity(intent);
             } catch (Exception e) {
