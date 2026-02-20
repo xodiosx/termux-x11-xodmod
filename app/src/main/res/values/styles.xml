@@ -1,68 +1,27 @@
 <resources>
-    <!-- ========== Global Dark Spinner Styles ========== -->
-    <style name="GlobalSpinnerStyle" parent="Widget.AppCompat.Spinner">
-        <item name="android:textColor">#ffffff</item>
-        <item name="android:background">@drawable/combo_box</item>   <!-- your dark drawable -->
-        <item name="android:popupBackground">@drawable/content_dialog_background</item>
-        <item name="android:dropDownHorizontalOffset">-4dp</item>
-        <item name="android:gravity">left|center_vertical</item>
-        <item name="android:paddingLeft">12dp</item>
-        <item name="android:paddingRight">36dp</item>
-        <item name="android:paddingTop">0dp</item>
-        <item name="android:paddingBottom">0dp</item>
-        <item name="android:textSize">16sp</item>
-    </style>
+<!-- In res/values/styles.xml -->
+<style name="Theme.FullScreenDialog" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:windowFullscreen">true</item>
+    <item name="android:windowIsFloating">false</item>
+    <item name="android:backgroundDimEnabled">true</item>
+    <item name="android:backgroundDimAmount">0.6</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowContentOverlay">@null</item>
+    <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    <item name="android:windowCloseOnTouchOutside">false</item>
+</style>
 
-    <style name="GlobalSpinnerDropDownItemStyle" parent="Widget.AppCompat.DropDownItem.Spinner">
-        <item name="android:textColor">#ffffff</item>
-        <!-- Use built‑in ripple for pressed state – no custom drawable needed -->
-        <item name="android:background">?attr/selectableItemBackground</item>
-        <item name="android:paddingLeft">12dp</item>
-        <item name="android:paddingRight">12dp</item>
-        <item name="android:paddingTop">8dp</item>
-        <item name="android:paddingBottom">8dp</item>
-    </style>
-
-    <!-- ========== Fullscreen Dialog Theme ========== -->
-    <style name="Theme.FullScreenDialog" parent="Theme.AppCompat.Light.NoActionBar">
-        <item name="android:windowNoTitle">true</item>
-        <item name="android:windowFullscreen">true</item>
-        <item name="android:windowIsFloating">false</item>
-        <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:backgroundDimAmount">0.6</item>
-        <item name="android:windowBackground">@android:color/transparent</item>
-        <item name="android:windowContentOverlay">@null</item>
-        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
-        <item name="android:windowCloseOnTouchOutside">false</item>
-    </style>
-
-    <!-- Optional: Add slide animation -->
-    <style name="Animation.Dialog" parent="android:Animation">
-        <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
-        <item name="android:windowExitAnimation">@android:anim/fade_out</item>
-    </style>
-
-    <!-- ========== Main App Themes ========== -->
+<!-- Optional: Add slide animation -->
+<style name="Animation.Dialog" parent="android:Animation">
+    <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
+    <item name="android:windowExitAnimation">@android:anim/fade_out</item>
+</style>
     <style name="AppTheme" parent="@style/Theme.AppCompat.DayNight.NoActionBar">
         <item name="android:windowActionBar">false</item>
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowTranslucentStatus">true</item>
         <item name="android:windowTranslucentNavigation">true</item>
-
-        <!-- Force dark spinner globally -->
-        <item name="android:spinnerStyle">@style/GlobalSpinnerStyle</item>
-        <item name="android:dropDownSpinnerStyle">@style/GlobalSpinnerStyle</item>
-        <item name="android:spinnerDropDownItemStyle">@style/GlobalSpinnerDropDownItemStyle</item>
-
-        <!-- Ensure popup backgrounds are dark -->
-        <item name="android:listPopupWindowStyle">@style/ListPopupWindow</item>
-        <item name="android:popupWindowStyle">@style/PopupWindow</item>
-        <item name="android:popupMenuStyle">@style/PopupMenu</item>
-
-        <!-- Force all text to light colors (optional, remove if not wanted) -->
-        <item name="android:textColorPrimary">#ffffff</item>
-        <item name="android:textColorSecondary">#b3ffffff</item>
-        <item name="android:textColorTertiary">#80ffffff</item>
     </style>
 
     <style name="AppThemeLight" parent="@style/Theme.AppCompat.Light.NoActionBar">
@@ -79,16 +38,6 @@
         <item name="popupWindowStyle">@style/PopupWindow</item>
         <item name="android:popupMenuStyle">@style/PopupMenu</item>
         <item name="popupMenuStyle">@style/PopupMenu</item>
-
-        <!-- Force dark spinner globally (overrides Light theme) -->
-        <item name="android:spinnerStyle">@style/GlobalSpinnerStyle</item>
-        <item name="android:dropDownSpinnerStyle">@style/GlobalSpinnerStyle</item>
-        <item name="android:spinnerDropDownItemStyle">@style/GlobalSpinnerDropDownItemStyle</item>
-
-        <!-- Force all text to light colors (optional, remove if not wanted) -->
-        <item name="android:textColorPrimary">#ffffff</item>
-        <item name="android:textColorSecondary">#b3ffffff</item>
-        <item name="android:textColorTertiary">#80ffffff</item>
     </style>
 
     <style name="AppThemeFullscreen" parent="@style/AppTheme">
@@ -98,7 +47,6 @@
         <item name="android:windowTranslucentNavigation">true</item>
     </style>
 
-    <!-- ========== Custom Spinner Styles (for explicit use) ========== -->
     <style name="ComboBox">
         <item name="android:layout_width">192dp</item>
         <item name="android:layout_height">42dp</item>
@@ -137,7 +85,6 @@
         <item name="android:popupBackground">@drawable/content_dialog_background</item>
     </style>
 
-    <!-- ========== Popup Styles (ensure dark backgrounds) ========== -->
     <style name="ListPopupWindow" parent="@android:style/Widget.ListPopupWindow">
         <item name="android:popupBackground">@drawable/content_dialog_background</item>
         <item name="android:dropDownHorizontalOffset">-4dp</item>
@@ -158,7 +105,6 @@
         <item name="android:windowBackground">@drawable/content_dialog_background</item>
     </style>
 
-    <!-- ========== Basic Widget Styles ========== -->
     <style name="EditText">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">42dp</item>
