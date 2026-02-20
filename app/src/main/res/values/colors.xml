@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="colorWhite">#ffffff</color>
-    <color name="colorDayNight">#ffffff</color>
+    <color name="colorDayNight">#7100FF</color>
 <color name="abc_decor_view_status_guard">#ff000000</color>
 <color name="abc_decor_view_status_guard_light">#ff310236</color>
 <color name="abc_search_url_text_normal">#ff7fa87f</color>
@@ -361,6 +361,6 @@
 <color name="white">#9458FD</color>
 <color name="window_background_color">#ff310236</color>
 <color name="colorblack">#ff000000</color>
-<color name="textColor">#FFFFFF</color>
+<color name="textColor">#7100FF</color>
 
 </resources>
