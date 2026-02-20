@@ -32,8 +32,7 @@
             <TextView
                 android:id="@+id/TVTitle"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/colorPrimary"
+                android:layout_height="wrap_content"                
                 android:maxLines="1"
                 android:textColor="#FFFFFF"         
     android:background="#000000"
