@@ -15,7 +15,8 @@
 
     <style name="GlobalSpinnerDropDownItemStyle" parent="Widget.AppCompat.DropDownItem.Spinner">
         <item name="android:textColor">#ffffff</item>
-        <item name="android:background">@drawable/spinner_dropdown_item_background</item> <!-- see note below -->
+        <!-- Use built‑in ripple for pressed state – no custom drawable needed -->
+        <item name="android:background">?attr/selectableItemBackground</item>
         <item name="android:paddingLeft">12dp</item>
         <item name="android:paddingRight">12dp</item>
         <item name="android:paddingTop">8dp</item>
