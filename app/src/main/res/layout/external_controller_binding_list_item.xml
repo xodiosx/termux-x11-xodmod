@@ -9,8 +9,6 @@
     android:paddingRight="16dp"
     android:paddingTop="8dp"
     android:paddingBottom="8dp"
-    android:textColor="#7100FF"        
-    android:background="#000000"
     android:gravity="center_vertical">
 
     <LinearLayout
@@ -18,8 +16,6 @@
         android:layout_height="wrap_content"
         android:layout_weight="1"
         android:orientation="vertical"
-        android:textColor="#7100FF"        
-    android:background="#000000"
         android:layout_marginRight="8dp">
 
         <TextView
@@ -28,8 +24,6 @@
             android:layout_height="wrap_content"
             android:gravity="center_vertical"
             android:ellipsize="end"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:maxLines="1" />
 
         <LinearLayout
@@ -41,16 +35,12 @@
                 style="@style/ComboBox"
                 android:id="@+id/SBindingType"
                 android:layout_width="140dp"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:entries="@array/binding_type_entries" />
 
             <Spinner
                 style="@style/ComboBox"
                 android:id="@+id/SBinding"
                 android:layout_width="0dp"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_weight="1" />
         </LinearLayout>
     </LinearLayout>

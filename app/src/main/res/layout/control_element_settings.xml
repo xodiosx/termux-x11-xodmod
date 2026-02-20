@@ -8,67 +8,49 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:textColor="#7100FF"        
-    android:background="#000000"
         android:padding="8dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:text="@string/type" />
 
         <Spinner
             android:id="@+id/SType"
             style="@style/ComboBox"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:layout_width="match_parent" />
 
         <LinearLayout
             android:id="@+id/LLShape"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:orientation="vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/shape" />
 
             <Spinner
                 android:id="@+id/SShape"
                 style="@style/ComboBox"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_width="match_parent" />
         </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:orientation="horizontal">
 
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/scale" />
 
             <TextView
                 android:id="@+id/TVScale"
                 android:layout_width="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_height="wrap_content" />
         </LinearLayout>
 
@@ -77,37 +59,27 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:max="150"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:min="50" />
 
         <LinearLayout
             android:id="@+id/LLRangeOptions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:orientation="vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/range" />
 
             <Spinner
                 android:id="@+id/SRange"
                 style="@style/ComboBox"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_width="match_parent" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/orientation" />
 
             <RadioGroup
@@ -132,8 +104,6 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/columns" />
 
             <com.termux.x11.controller.widget.NumberPicker
@@ -141,8 +111,6 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:maxValue="8"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 app:minValue="3" />
         </LinearLayout>
 
@@ -150,8 +118,6 @@
             android:id="@+id/LLBindings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:orientation="vertical" />
 
         <LinearLayout
@@ -159,64 +125,46 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:visibility="gone">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/binding_up" />
 
             <Spinner
                 android:id="@+id/SBindingUp"
                 style="@style/ComboBox"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_width="match_parent" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/binding_right" />
 
             <Spinner
                 android:id="@+id/SBindingRight"
                 style="@style/ComboBox"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_width="match_parent" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/binding_down" />
 
             <Spinner
                 android:id="@+id/SBindingDown"
                 style="@style/ComboBox"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_width="match_parent" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/binding_left" />
 
             <Spinner
                 android:id="@+id/SBindingLeft"
                 style="@style/ComboBox"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_width="match_parent" />
         </LinearLayout>
 
@@ -224,23 +172,17 @@
             android:id="@+id/CBToggleSwitch"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:text="@string/toggle_switch" />
 
         <LinearLayout
             android:id="@+id/LLCustomTextIcon"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#7100FF"        
-    android:background="#000000"
             android:orientation="vertical">
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/custom_text" />
 
             <EditText
@@ -248,8 +190,6 @@
                 style="@style/EditText"
                 android:layout_width="match_parent"
                 android:hint="@string/none"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:inputType="textCapCharacters"
                 android:maxLength="8" />
 
@@ -260,15 +200,11 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:text="@string/icon" />
 
             <HorizontalScrollView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textColor="#7100FF"        
-    android:background="#000000"
                 android:layout_marginTop="4dp">
 
                 <LinearLayout
