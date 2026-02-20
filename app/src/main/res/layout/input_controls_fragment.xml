@@ -8,14 +8,14 @@
         android:orientation="vertical"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        containersandroid:textColor="#7100FF"        
+        android:textColor="#7100FF        
     android:background="#000000"
         android:padding="16dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            containersandroid:textColor="#7100FF"        
+            android:textColor="#7100FF        
     android:background="#000000"
             android:text="@string/profile" />
 
@@ -29,7 +29,7 @@
                 style="@style/ComboBox"
                 android:id="@+id/SProfile"
                 android:layout_width="0dp"
-                containersandroid:textColor="#7100FF"        
+                android:textColor="#7100FF        
     android:background="#000000"
                 android:layout_height="wrap_content"
                 android:layout_weight="1" />
@@ -60,7 +60,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            containersandroid:textColor="#7100FF"        
+            android:textColor="#7100FF        
     android:background="#000000"
             android:layout_marginTop="8dp">
 
@@ -68,14 +68,14 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                containersandroid:textColor="#7100FF"        
+                android:textColor="#7100FF        
     android:background="#000000"
                 android:text="@string/cursor_speed"/>
 
             <TextView
                 android:id="@+id/TVCursorSpeed"
                 android:layout_width="wrap_content"
-                containersandroid:textColor="#7100FF"        
+                android:textColor="#7100FF        
     android:background="#000000"
                 android:layout_height="wrap_content" />
         </LinearLayout>
@@ -97,14 +97,14 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                containersandroid:textColor="#7100FF"        
+                android:textColor="#7100FF        
     android:background="#000000"
                 android:text="@string/overlay_opacity"/>
 
             <TextView
                 android:id="@+id/TVUiOpacity"
                 android:layout_width="wrap_content"
-                containersandroid:textColor="#7100FF"        
+                android:textColor="#7100FF        
     android:background="#000000"
                 android:layout_height="wrap_content" />
         </LinearLayout>
@@ -156,7 +156,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textStyle="bold"
-            containersandroid:textColor="#7100FF"        
+            android:textColor="#7100FF        
     android:background="#000000"
             android:text="@string/external_controllers"           
             android:layout_marginTop="8dp" />
@@ -174,7 +174,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
-            containersandroid:textColor="#7100FF"        
+            android:textColor="#7100FF        
     android:background="#000000"
             android:text="@string/no_items_to_display"
             android:visibility="gone" />

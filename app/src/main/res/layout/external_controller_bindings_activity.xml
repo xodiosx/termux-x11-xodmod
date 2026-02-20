@@ -4,7 +4,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    containersandroid:textColor="#7100FF"        
+    android:textColor="#7100FF        
     android:background="#000000"
     android:orientation="vertical">
 
@@ -13,7 +13,7 @@
         android:layout_height="?actionBarSize"
         android:id="@+id/Toolbar"
         app:layout_scrollFlags="enterAlways|scroll"
-        containersandroid:textColor="#7100FF"        
+        android:textColor="#7100FF        
     android:background="#000000"
         app:titleTextAppearance="@style/TextAppearance.AppCompat.Medium" />
 
@@ -26,7 +26,7 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:scrollbars="vertical"
-            containersandroid:textColor="#7100FF"        
+            android:textColor="#7100FF        
     android:background="#000000"
             app:layoutManager="LinearLayoutManager" />
 
@@ -37,7 +37,7 @@
             android:gravity="center"
             android:text="@string/press_any_button_on_your_controller"
             android:textSize="24sp"
-            containersandroid:textColor="#7100FF"        
+            android:textColor="#7100FF        
     android:background="#000000"
             android:visibility="gone" />
     </FrameLayout>
