@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="colorWhite">#ffffff</color>
-    <color name="colorDayNight">#640082</color>
+    <color name="colorDayNight">#420091</color>
 <color name="abc_decor_view_status_guard">#ff000000</color>
 <color name="abc_decor_view_status_guard_light">#ff310236</color>
 <color name="abc_search_url_text_normal">#ff7fa87f</color>
