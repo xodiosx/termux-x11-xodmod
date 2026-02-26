@@ -6,6 +6,7 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.os.Binder;
 import android.os.Build;
@@ -16,6 +17,7 @@ import android.os.SystemClock;
 import android.text.SpannableString;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.ViewGroup;
@@ -43,7 +45,8 @@ public class HudService extends Service {
     private boolean attached = false;
 
     /* ---------- THREADING ---------- */
-    private ScheduledExecutorService scheduler;
+    private ScheduledExecutorService hudScheduler;   // for HUD refresh (2 sec)
+    private ScheduledExecutorService gpuScheduler;   // for GPU commands (5 sec)
     private Handler mainHandler;
 
     /* ---------- FPS ---------- */
@@ -56,8 +59,11 @@ public class HudService extends Service {
     private long lastAppCpuTicks = 0;
     private long lastWallTimeMs = 0;
 
-    /* ---------- GPU / MEM / TEMP ---------- */
-    private String gpuName = "GPU: Unknown";
+    /* ---------- GPU (from container) ---------- */
+    private volatile String openGLRenderer = "OGL: ...";
+    private volatile String vulkanDeviceName = "VK: ...";
+
+    /* ---------- MEM / TEMP ---------- */
     private String totalRam;
 
     /* ===================== SERVICE ===================== */
@@ -74,9 +80,9 @@ public class HudService extends Service {
     public void onCreate() {
         super.onCreate();
         mainHandler = new Handler(Looper.getMainLooper());
-        gpuName = detectGpuName();
         totalRam = getTotalRam();
         startFpsReader();
+        startGpuInfoFetcher();   // periodically run glxinfo/vulkaninfo
         startHudLoop();
     }
 
@@ -92,7 +98,7 @@ public class HudService extends Service {
 
             hudView = new TextView(act);
             hudView.setTypeface(Typeface.MONOSPACE);
-            hudView.setTextSize(12);
+            hudView.setTextSize(12);               // initial size, will be adjusted
             hudView.setPadding(12, 6, 12, 6);
             hudView.setBackgroundColor(Color.argb(160, 0, 0, 0));
 
@@ -129,55 +135,114 @@ public class HudService extends Service {
     /* ===================== HUD UPDATE LOOP ===================== */
 
     private void startHudLoop() {
-        scheduler = Executors.newSingleThreadScheduledExecutor();
-        scheduler.scheduleAtFixedRate(() -> {
-            SpannableString text = buildHudText();
+        hudScheduler = Executors.newSingleThreadScheduledExecutor();
+        hudScheduler.scheduleAtFixedRate(() -> {
+            // Build the full HUD text on background thread
+            String fullText = buildHudText();
+            SpannableString colored = colorizeText(fullText);
+
             mainHandler.post(() -> {
                 if (attached && hudView != null) {
-                    hudView.setText(text);
+                    hudView.setText(colored);
+                    adjustTextSizeToFit(hudView, colored.toString());
                 }
             });
         }, 0, 2, TimeUnit.SECONDS);
     }
 
-    /* ===================== BUILD HUD WITH COLORS ===================== */
+    /* ===================== GPU INFO FETCHER (container) ===================== */
 
-    private SpannableString buildHudText() {
+    private void startGpuInfoFetcher() {
+        gpuScheduler = Executors.newSingleThreadScheduledExecutor();
+        gpuScheduler.scheduleAtFixedRate(this::fetchGpuInfoFromContainer, 0, 5, TimeUnit.SECONDS);
+    }
+
+    private void fetchGpuInfoFromContainer() {
+        try {
+            // Commands to run inside the Linux container (same environment as Termux X11)
+            String[] cmd = {
+                    "/bin/sh", "-c",
+                    "export DISPLAY=$DISPLAY; export PATH=$PATH; " +
+                    "OGLGPU=$(glxinfo -B 2>/dev/null | awk -F: '/OpenGL renderer string/ {gsub(/^[ \\t]+|[ \\t]+$/,\"\",$2); print $2}'); " +
+                    "VKGPU=$(vulkaninfo 2>/dev/null | awk -F= '/deviceName/ {gsub(/^[ \\t]+|[ \\t]+$/,\"\",$2); print $2}' | head -n1); " +
+                    "echo \"OGL:$OGLGPU\"; echo \"VK:$VKGPU\""
+            };
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            String ogl = null;
+            String vk = null;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("OGL:")) {
+                    ogl = line.substring(4).trim();
+                    if (ogl.isEmpty()) ogl = null;
+                } else if (line.startsWith("VK:")) {
+                    vk = line.substring(3).trim();
+                    if (vk.isEmpty()) vk = null;
+                }
+            }
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0 && (ogl != null || vk != null)) {
+                if (ogl != null) openGLRenderer = "OGL: " + ogl;
+                if (vk != null) vulkanDeviceName = "VK: " + vk;
+            } else {
+                // fallback to Android system properties
+                fallbackGpuInfo();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to run container GPU commands", e);
+            fallbackGpuInfo();
+        }
+    }
+
+    private void fallbackGpuInfo() {
+        String ogl = getProp("ro.hardware.egl");
+        String vk = getProp("ro.hardware.vulkan");
+        if (ogl == null || ogl.isEmpty()) ogl = getProp("ro.board.platform");
+        if (vk == null || vk.isEmpty()) vk = ogl; // fallback to same
+
+        openGLRenderer = "OGL: " + (ogl != null ? ogl : "Unknown");
+        vulkanDeviceName = "VK: " + (vk != null ? vk : "Unknown");
+    }
+
+    /* ===================== BUILD SINGLE‑LINE HUD ===================== */
+
+    private String buildHudText() {
         String fps = fpsText;
         String temp = getCpuTemp();          // e.g. "CPU: 45.2°C"
         String cpu = getCpuUsage();
         String mem = getMemoryInfo();
-        long availMB = getAvailableMemoryMB();
-        float tempVal = getCpuTempValue();   // numeric for coloring
 
-        String full = fps + " | " + temp + " | " + cpu + " | " + gpuName + " | " + mem;
+        // Combine everything into one line
+        return fps + " | " + temp + " | " + cpu + " | " +
+               openGLRenderer + " | " + vulkanDeviceName + " | " + mem;
+    }
+
+    private SpannableString colorizeText(String full) {
         SpannableString s = new SpannableString(full);
 
         // FPS color
-        color(s, fps, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
+        color(s, fpsText, fpsValue >= 0 && fpsValue < 10 ? Color.RED : Color.GREEN);
 
         // Temperature color
-        int tempColor;
-        if (tempVal < 0) {
-            tempColor = Color.LTGRAY;      // unavailable
-        } else if (tempVal > 70) {
-            tempColor = Color.RED;
-        } else if (tempVal > 40) {
-            tempColor = Color.rgb(255, 165, 0); // orange
-        } else {
-            tempColor = Color.CYAN;
-        }
-        color(s, temp, tempColor);
+        float tempVal = getCpuTempValue();
+        color(s, getCpuTemp(), tempColor(tempVal));
 
         // CPU usage always yellow
-        color(s, cpu, Color.YELLOW);
+        color(s, getCpuUsage(), Color.YELLOW);
 
-        // GPU name magenta
-        color(s, gpuName, Color.MAGENTA);
+        // OGL and VK lines magenta
+        color(s, openGLRenderer, Color.MAGENTA);
+        color(s, vulkanDeviceName, Color.MAGENTA);
 
         // Memory red if < 800 MB available
-        int memColor = (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN;
-        color(s, mem, memColor);
+        long availMB = getAvailableMemoryMB();
+        color(s, getMemoryInfo(), (availMB >= 0 && availMB < 800) ? Color.RED : Color.CYAN);
 
         return s;
     }
@@ -191,22 +256,57 @@ public class HudService extends Service {
         }
     }
 
-    /* ===================== FPS READER (with logcat -c) ===================== */
+    private int tempColor(float tempVal) {
+        if (tempVal < 0) return Color.LTGRAY;
+        else if (tempVal > 70) return Color.RED;
+        else if (tempVal > 40) return Color.rgb(255, 165, 0);
+        else return Color.CYAN;
+    }
+
+    /* ===================== AUTO‑FIT TEXT SIZE ===================== */
+
+    private void adjustTextSizeToFit(TextView textView, String text) {
+        if (textView == null || text == null) return;
+
+        Activity act = activityRef != null ? activityRef.get() : null;
+        if (act == null) return;
+
+        // Get screen width minus horizontal margins/padding
+        DisplayMetrics metrics = new DisplayMetrics();
+        act.getWindowManager().getDefaultDisplay().getMetrics(metrics);
+        int screenWidth = metrics.widthPixels;
+        int availableWidth = screenWidth - textView.getPaddingLeft() - textView.getPaddingRight() - 16; // 16 for left/right margins
+
+        Paint paint = new Paint();
+        paint.setTypeface(textView.getTypeface());
+        paint.setTextSize(textView.getTextSize()); // current size in pixels
+
+        float textWidth = paint.measureText(text);
+        if (textWidth <= availableWidth) return; // fits
+
+        // Reduce text size until it fits (or reaches min 8sp)
+        float minSizePx = 8 * metrics.density; // 8sp in pixels
+        float newSizePx = textView.getTextSize();
+        while (newSizePx > minSizePx && textWidth > availableWidth) {
+            newSizePx -= 1;
+            paint.setTextSize(newSizePx);
+            textWidth = paint.measureText(text);
+        }
+        textView.setTextSize(newSizePx / metrics.density); // convert back to sp
+    }
+
+    /* ===================== FPS READER (unchanged) ===================== */
 
     private void startFpsReader() {
         fpsThread = new Thread(() -> {
             try {
-                // Clear old logcat entries
                 Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
-
                 ProcessBuilder pb = new ProcessBuilder(
                         "logcat", "-s", "LorieNative:I", "-v", "brief"
                 );
                 pb.redirectErrorStream(true);
-                java.lang.Process p = pb.start();
-
-                BufferedReader br =
-                        new BufferedReader(new InputStreamReader(p.getInputStream()));
+                Process p = pb.start();
+                BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
 
                 String line;
                 while (fpsRunning && (line = br.readLine()) != null) {
@@ -217,7 +317,6 @@ public class HudService extends Service {
                 Log.e(TAG, "FPS reader error", e);
             }
         }, "FPS-Reader");
-
         fpsThread.setDaemon(true);
         fpsThread.start();
     }
@@ -233,7 +332,7 @@ public class HudService extends Service {
         } catch (Exception ignored) {}
     }
 
-    /* ===================== CPU USAGE (whole app UID) ===================== */
+    /* ===================== CPU USAGE (unchanged) ===================== */
 
     private int[] getAppPids() {
         int uid = android.os.Process.myUid();
@@ -303,23 +402,19 @@ public class HudService extends Service {
             return "CPU: ...";
         }
 
-        long dCpu = totalCpuTicks - lastAppCpuTicks;   // ticks
-        long dTime = now - lastWallTimeMs;              // ms
+        long dCpu = totalCpuTicks - lastAppCpuTicks;
+        long dTime = now - lastWallTimeMs;
 
         lastWallTimeMs = now;
         lastAppCpuTicks = totalCpuTicks;
 
         if (dTime <= 0) return "CPU: 0%";
 
-        // USER_HZ = 100 → 1 tick = 10 ms
-        // cpu_ms = dCpu * 10
-        // usage% = (cpu_ms / dTime) * 100 = dCpu * 1000 / dTime
-        float usage = (dCpu * 1000f) / dTime;
-
+        float usage = (dCpu * 1000f) / dTime;  // ticks (10ms) to percent
         return String.format(Locale.US, "CPU: %.1f%%", usage);
     }
 
-    /* ===================== CPU TEMPERATURE ===================== */
+    /* ===================== CPU TEMPERATURE (unchanged) ===================== */
 
     private String getCpuTemp() {
         for (int i = 0; i < 10; i++) {
@@ -353,7 +448,7 @@ public class HudService extends Service {
         return -1;
     }
 
-    /* ===================== MEMORY ===================== */
+    /* ===================== MEMORY (unchanged) ===================== */
 
     private String getMemoryInfo() {
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
@@ -375,7 +470,7 @@ public class HudService extends Service {
             ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
             ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
             am.getMemoryInfo(mi);
-            return mi.availMem / (1024 * 1024); // MB
+            return mi.availMem / (1024 * 1024);
         } catch (Exception e) {
             return -1;
         }
@@ -387,28 +482,12 @@ public class HudService extends Service {
                 b / Math.pow(1024, e), "KMGTPE".charAt(e - 1));
     }
 
-    /* ===================== GPU NAME ===================== */
-
-    private String detectGpuName() {
-        String[] props = {
-                "ro.hardware.vulkan",
-                "ro.hardware.egl",
-                "ro.board.platform"
-        };
-        for (String p : props) {
-            String v = getProp(p);
-            if (v != null && !v.isEmpty())
-                return "GPU: " + v;
-        }
-        return "GPU: Unknown";
-    }
+    /* ===================== SYSTEM PROPERTY HELPER ===================== */
 
     private String getProp(String key) {
         try {
-            java.lang.Process p =
-                    Runtime.getRuntime().exec(new String[]{"getprop", key});
-            BufferedReader br = new BufferedReader(
-                    new InputStreamReader(p.getInputStream()));
+            Process p = Runtime.getRuntime().exec(new String[]{"getprop", key});
+            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
             return br.readLine();
         } catch (Exception e) {
             return null;
@@ -421,7 +500,8 @@ public class HudService extends Service {
     public void onDestroy() {
         fpsRunning = false;
         detach();
-        if (scheduler != null) scheduler.shutdownNow();
+        if (hudScheduler != null) hudScheduler.shutdownNow();
+        if (gpuScheduler != null) gpuScheduler.shutdownNow();
         super.onDestroy();
     }
 
