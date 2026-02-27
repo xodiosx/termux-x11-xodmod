@@ -23,7 +23,7 @@
         <Preference
             android:key="select_controller"
             android:title="@string/select_controller"
-            android:icon="@android:drawable/ic_menu_directions"
+            android:icon="@drawable/icon_menu_game_pad_open_shape"
             android:summary="@string/select_controller_summary" />
             <Preference
     android:key="open_progress_manager"
