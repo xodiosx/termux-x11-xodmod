@@ -1,5 +1,6 @@
 package com.termux.x11.controller.winhandler;
 
+import android.widget.Toast;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Build;

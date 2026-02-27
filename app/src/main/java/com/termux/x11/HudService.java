@@ -26,7 +26,7 @@ import android.widget.FrameLayout;
 import com.termux.x11.controller.core.CPUStatus;      // for CPU frequency
 import com.termux.x11.controller.core.StringUtils;    // for memory formatting
 import com.termux.x11.controller.winhandler.TaskManagerDialog;
-import android.widget.Toast;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
