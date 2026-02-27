@@ -4,6 +4,7 @@
 
 package com.termux.x11.input;
 
+import android.app.NotificationManager;
 import static android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC;
 import static android.view.KeyEvent.KEYCODE_BACK;
 import static android.view.KeyEvent.KEYCODE_VOLUME_DOWN;
