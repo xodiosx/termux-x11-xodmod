@@ -28,7 +28,7 @@
             <Preference
     android:key="open_progress_manager"
     android:title="@string/task_manager"
-    android:icon="@drawable/icon_menu_show_task_manager"   <!-- optional icon -->
+    android:icon="@drawable/icon_menu_show_task_manager"
     android:summary="Managing tasks and processes" />
             
         <SwitchPreferenceCompat
