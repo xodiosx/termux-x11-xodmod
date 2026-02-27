@@ -22,7 +22,7 @@ import android.content.Context;
 
 import androidx.appcompat.app.AppCompatActivity;
 import com.termux.x11.controller.winhandler.ProcessInfo;
-// Add these imports at the top of the file, after other imports:
+//
 import java.util.List;
 import java.util.ArrayList;
 import android.os.RemoteException;
@@ -31,7 +31,7 @@ import android.os.ParcelFileDescriptor;
 import android.app.NotificationChannel;
 import androidx.viewpager.widget.ViewPager;
 import android.service.notification.StatusBarNotification;
-// Add these imports if they're missing
+// 
 import android.app.PendingIntent;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -54,8 +54,7 @@ import android.provider.Settings;
 import android.view.WindowInsets;
 import androidx.appcompat.app.AlertDialog;
 import java.util.Objects;
-
-// Add these imports at the top
+// 
 import android.os.Handler;
 import android.app.Notification;
 import android.app.NotificationManager;
