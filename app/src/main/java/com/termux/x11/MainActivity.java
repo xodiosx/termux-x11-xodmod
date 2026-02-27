@@ -314,13 +314,11 @@ private void checkConnectedControllers() {
     return false;
 }
     
-public boolean isWineRunning() {
+pupublic boolean isWineRunning() {
     try {
-        // Use pgrep for more reliable process detection
-        Process process = Runtime.getRuntime().exec("pgrep -f winhandler.exe");
-      // runOnUiThread(() -> Toast.makeText(this, "winhandler: ", Toast.LENGTH_SHORT).show());
-         return process.waitFor() == 0;
-        
+        // Fully qualify java.lang.Process to avoid conflict with android.os.Process
+        java.lang.Process process = Runtime.getRuntime().exec("pgrep -f winhandler.exe");
+        return process.waitFor() == 0;
     } catch (Exception e) {
         return false;
     }
