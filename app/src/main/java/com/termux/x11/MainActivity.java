@@ -1,6 +1,5 @@
 package com.termux.x11;
 
-
 // Add these imports at the top with other imports
 import android.net.Uri;
 import androidx.fragment.app.FragmentManager;
@@ -28,7 +27,6 @@ import java.util.List;
 import java.util.ArrayList;
 import android.os.RemoteException;
 import android.os.ParcelFileDescriptor;
-
 
 import android.app.NotificationChannel;
 import androidx.viewpager.widget.ViewPager;
@@ -76,7 +74,6 @@ import android.widget.ImageButton;
 import androidx.viewpager.widget.ViewPager;
 import androidx.core.app.NotificationCompat;
 import androidx.core.math.MathUtils;
-
 
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -161,7 +158,15 @@ import com.termux.x11.utils.SamsungDexUtils;
 import com.termux.x11.utils.TermuxX11ExtraKeys;
 import com.termux.x11.utils.X11ToolbarViewPager;
 
-
+// ========== ADD THESE IMPORTS FOR PROCESS LISTING ==========
+import java.io.File;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import android.os.Process;  // for Process.myUid()
+// ===========================================================
 
 import java.io.File;
 import java.util.Map;
@@ -237,11 +242,9 @@ private boolean isResumed = false;
 // Call this when the HUD preference is enabled
 public void startHudService() {
     Intent intent = new Intent(this, HudService.class);
- //   if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
- //       startForegroundService(intent);
- //   } else {
+    
         startService(intent);
-//    }
+    
     bindService(intent, hudConnection, Context.BIND_AUTO_CREATE);
 }
 
@@ -430,7 +433,7 @@ return findViewById(R.id.display_terminal_toolbar_view_pager);
             // Use intent to communicate with Termux app
             Intent intent = new Intent();
             intent.setAction("com.termux.action.INSTALL_X11");
-            intent.setPackage("com.termux.x11");
+            intent.setPackage("com.termux");
             try {
                 activity.startActivity(intent);
             } catch (Exception e) {
@@ -474,9 +477,8 @@ return findViewById(R.id.display_terminal_toolbar_view_pager);
 
         @Override
         public List<ProcessInfo> collectProcessorInfo(String tag) {
-            // Return empty list
-            Log.d("MainActivity", "collectProcessorInfo called with tag: " + tag);
-            return new ArrayList<ProcessInfo>(); // Return empty list
+            // Return real Android process list instead of empty placeholder
+            return getAndroidProcessList();
         }
 
         @Override
@@ -498,7 +500,7 @@ return findViewById(R.id.display_terminal_toolbar_view_pager);
         @Override
         public void onExitApp() {
             // Exit the app
-            System.exit(0);
+          //  System.exit(0);
          finish();
        //     finishAffinity();
         }
@@ -621,7 +623,7 @@ public void onBackPressed() {
             showPreferencesInDrawer();
             drawerLayout.openDrawer(GravityCompat.START);
         // Double tap to exit
-        if (backPressedTime + 2000 > System.currentTimeMillis()) {
+      /*  if (backPressedTime + 2000 > System.currentTimeMillis()) {
             //super.onBackPressed();
 
 
@@ -629,7 +631,9 @@ public void onBackPressed() {
         } else {
             Toast.makeText(this, "Press back 2 times to exit", Toast.LENGTH_SHORT).show();
         }
+        
         backPressedTime = System.currentTimeMillis();
+        */
     }
 }
 
@@ -660,8 +664,8 @@ public void prepareToExit() {
             // 5. Exit process completely
             handler.postDelayed(() -> {
                
-             System.exit(0);
-          //   finish();
+            // System.exit(0);
+            finish();
             }, 100);
             
         } catch (Exception e) {
@@ -961,7 +965,7 @@ lorieView.setOnCapturedPointerListener((v, e) -> {
     });
 
      
-  /*     // Set up basic touch listeners - let dispatchTouchEvent handle the complex routing
+  /*       // Set up basic touch listeners - let dispatchTouchEvent handle the complex routing
 lorieParent.setOnTouchListener((v, event) -> {
     // Don't handle touches when drawer is open
     if (drawerLayout != null && drawerLayout.isDrawerOpen(GravityCompat.START)) {
@@ -1040,11 +1044,11 @@ lorieView.setOnHoverListener((v, e) -> {
 
         // Taken from Stackoverflow answer https://stackoverflow.com/questions/7417123/android-how-to-adjust-layout-in-full-screen-mode-when-softkeyboard-is-visible/7509285#
       //  FullscreenWorkaround.assistActivity(this);
-/*
+
 mNotificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         mNotification = buildNotification();
         mNotificationManager.notify(mNotificationId, mNotification);
-*/
+
         if (tryConnect()) {
             final View content = findViewById(android.R.id.content);
             content.getViewTreeObserver().addOnPreDrawListener(mOnPredrawListener);
@@ -1460,8 +1464,8 @@ protected void onStop() {
     @Override
     public void onResume() {
         super.onResume();
-   //     mNotification = buildNotification();
- //       mNotificationManager.notify(mNotificationId, mNotification);
+        mNotification = buildNotification();
+        mNotificationManager.notify(mNotificationId, mNotification);
 isResumed = true;
     if (isBound && hudService != null) {
         hudService.attachToActivity(this);
@@ -1481,7 +1485,7 @@ isResumed = true;
         super.onPause();
         isResumed = false;
         finish();
-      //  prepareToExit();
+        //prepareToExit();
     if (isBound && hudService != null) {
         hudService.detach();
     }
@@ -1887,7 +1891,83 @@ isResumed = true;
         return isTouchPointInView((View) getDisplayTerminalToolbarViewPager(), (int) event.getRawX(), (int) event.getRawY());
     }
     
-    
+    // ================== NEW REAL PROCESS LISTING METHODS ==================
+    /**
+     * Returns a list of all processes owned by this app's UID.
+     * Uses /proc filesystem (no root required).
+     */
+    private List<ProcessInfo> getAndroidProcessList() {
+        List<ProcessInfo> list = new ArrayList<>();
+        int myUid = android.os.Process.myUid();
+        File proc = new File("/proc");
+        File[] files = proc.listFiles();
+        if (files == null) return list;
+
+        for (File file : files) {
+            if (!file.isDirectory()) continue;
+            String name = file.getName();
+            if (!name.matches("\\d+")) continue; // only numeric PIDs
+            int pid = Integer.parseInt(name);
+
+            ProcessInfo info = readProcessInfo(pid, myUid);
+            if (info != null) list.add(info);
+        }
+        return list;
+    }
+
+    /**
+     * Reads process info from /proc/[pid]/status and /proc/[pid]/statm.
+     * Returns null if process is not owned by myUid or if status cannot be read.
+     */
+    private ProcessInfo readProcessInfo(int pid, int myUid) {
+        // Read UID and process name from /proc/[pid]/status
+        File statusFile = new File("/proc/" + pid + "/status");
+        if (!statusFile.exists()) return null;
+
+        String procName = null;
+        int uid = -1;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(statusFile))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.startsWith("Uid:")) {
+                    String[] parts = line.split("\\s+");
+                    uid = Integer.parseInt(parts[1]); // real UID
+                    if (uid != myUid) return null;    // filter by our UID
+                } else if (line.startsWith("Name:")) {
+                    procName = line.substring(5).trim();
+                }
+            }
+        } catch (IOException | NumberFormatException e) {
+            return null;
+        }
+
+        if (procName == null) procName = "unknown";
+
+        // Read memory (RSS) from /proc/[pid]/statm
+        long memoryBytes = 0;
+        File statmFile = new File("/proc/" + pid + "/statm");
+        if (statmFile.exists()) {
+            try (BufferedReader reader = new BufferedReader(new FileReader(statmFile))) {
+                String[] parts = reader.readLine().split("\\s+");
+                if (parts.length >= 2) {
+                    long pages = Long.parseLong(parts[1]); // RSS in pages
+                    memoryBytes = pages * 4096; // assume 4KB page size
+                } else if (parts.length >= 1) {
+                    long pages = Long.parseLong(parts[0]); // total program size
+                    memoryBytes = pages * 4096;
+                }
+            } catch (IOException | NumberFormatException ignored) {}
+        }
+
+        // affinityMask: set to all CPUs (irrelevant for Android processes but required by constructor)
+        int numCores = Runtime.getRuntime().availableProcessors();
+        int affinityMask = (1 << numCores) - 1; // all CPUs
+
+        return new ProcessInfo(pid, procName, memoryBytes, affinityMask, false);
+    }
+    // ======================================================================
+
     // Add this class inside MainActivity.java (but outside MainActivity class)
 public static class DrawerPreferenceFragment extends PreferenceFragmentCompat 
         implements Preference.OnPreferenceClickListener, Preference.OnPreferenceChangeListener {
@@ -1974,7 +2054,7 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
                 return true;
 
             case "exit":
-              //  System.exit(0);
+               // System.exit(0);
                 activity.finish();
                 return true;
         }
@@ -2001,20 +2081,20 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
     }
 
     private void startHudService() {
-   /* if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
+  //  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
         // Request permission
-        Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:" + activity.getPackageName()));
-        activity.startActivityForResult(intent, 1001);
+      //  Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+           //     Uri.parse("package:" + activity.getPackageName()));
+      //  activity.startActivityForResult(intent, 1001);
 
         // Revert the switch
-        SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
-        if (hudSwitch != null) hudSwitch.setChecked(false);
+    //    SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
+   //     if (hudSwitch != null) hudSwitch.setChecked(false);
 
-        Toast.makeText(activity, "Please grant overlay permission", Toast.LENGTH_LONG).show();
-        return;
-    }
-*/
+   //     Toast.makeText(activity, "Please grant overlay permission", Toast.LENGTH_LONG).show();
+//      return;
+//    }
+
     activity.startHudService();   // <-- use activity's method
     Toast.makeText(activity, "HUD started", Toast.LENGTH_SHORT).show();
     activity.drawerLayout.closeDrawer(GravityCompat.START);

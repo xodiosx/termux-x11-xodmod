@@ -25,6 +25,11 @@
             android:title="@string/select_controller"
             android:icon="@android:drawable/ic_menu_directions"
             android:summary="@string/select_controller_summary" />
+            <Preference
+    android:key="open_progress_manager"
+    android:title="@string/task_manager"
+    android:icon="@drawable/icon_menu_show_task_manager"   <!-- optional icon -->
+    android:summary="Managing tasks and processes" />
             
         <SwitchPreferenceCompat
     android:key="hud_enabled"
