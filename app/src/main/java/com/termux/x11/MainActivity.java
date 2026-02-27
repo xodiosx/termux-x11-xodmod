@@ -189,7 +189,8 @@ public class MainActivity extends LoriePreferences {
     protected ICmdEntryInterface service = null;
     public TermuxX11ExtraKeys mExtraKeys;
     private Notification mNotification;
-    public static final int NOTIFICATION_ID = 7897;
+  //  private final int mNotificationId = 7897;
+    public static final int mNotificationId = 7897;
     NotificationManager mNotificationManager;
     static InputMethodManager inputMethodManager;
     private boolean mClientConnected = false;
