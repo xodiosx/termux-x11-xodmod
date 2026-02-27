@@ -235,30 +235,30 @@ public class HudService extends Service {
      * - If no keyword matches, returns the first word.
      */
     private String simplifyGpuString(String raw) {
-        if (raw == null || raw.isEmpty()) return "?";
+    if (raw == null || raw.isEmpty()) return "?";
 
-        String lower = raw.toLowerCase();
-        String[] keywords = {
-            "gl4es", "venus", "Mali", "adreno", "mali", "powervr",
-            "turnip", "llvm", "swrast", "virgl", "VIRGL",
-            "panfrost", "v3d", "vc4", "nvidia", "geforce", "radeon",
-            "amd", "intel", "iris", "crocus", "zink", "lavapipe"
-        };
+    String lower = raw.toLowerCase();
+    // Prioritise driver names, then hardware names
+    String[] keywords = {
+        // Software / wrapper renderers
+        "gl4es", "zink", "virgl", "softpipe", "swrast", "llvm",
+        // Vulkan drivers
+        "turnip", "venus", "wrapper", "panfrost", "v3d",
+        // Hardware brands (lower priority)
+        "adreno", "mali", "powervr", "nvidia", "geforce", "radeon", "amd", "intel", "iris", "virtio"
+    };
 
-
-        for (String kw : keywords) {
-            if (lower.contains(kw)) {
-                // Return the original case of the first occurrence of the keyword
-                int idx = lower.indexOf(kw);
-                return raw.substring(idx, idx + kw.length());
-            }
+    for (String kw : keywords) {
+        if (lower.contains(kw)) {
+            int idx = lower.indexOf(kw);
+            return raw.substring(idx, idx + kw.length());
         }
-
-        // No keyword match → return first word
-        String[] parts = raw.trim().split("\\s+");
-        return parts[0];
     }
 
+    // Fallback: first word
+    String[] parts = raw.trim().split("\\s+");
+    return parts[0];
+}
     /* ===================== BUILD HUD TEXT ===================== */
 
     private String buildHudText() {
