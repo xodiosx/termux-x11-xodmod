@@ -101,20 +101,36 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
 
         listItemMenu.inflate(R.menu.process_popup_menu);
         listItemMenu.setOnMenuItemClickListener((menuItem) -> {
-            int itemId = menuItem.getItemId();
-            final WinHandler winHandler = activity.getWinHandler();
-            if (itemId == R.id.process_affinity) {
-                showProcessorAffinityDialog(processInfo);
-            } else if (itemId == R.id.bring_to_front) {
-                winHandler.bringToFront(processInfo.name);
-                dismiss();
-            } else if (itemId == R.id.process_end) {
-                ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () -> {
-                    winHandler.killProcess(processInfo.name);
-                });
-            }
-            return true;
-        });
+    int itemId = menuItem.getItemId();
+    final WinHandler winHandler = activity.getWinHandler();
+    if (itemId == R.id.process_affinity) {
+        showProcessorAffinityDialog(processInfo);
+    } else if (itemId == R.id.bring_to_front) {
+        // Only for Wine processes
+        if (processInfo.wow64Process) {
+            winHandler.bringToFront(processInfo.name);
+            dismiss();
+        } else {
+            Toast.makeText(activity, "Bring to front not supported for Android processes", Toast.LENGTH_SHORT).show();
+        }
+    } else if (itemId == R.id.process_end) {
+        // Handle end process for both Wine and Android
+        if (processInfo.wow64Process) {
+            ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () -> {
+                winHandler.killProcess(processInfo.name);
+            });
+        } else {
+            ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () -> {
+                android.os.Process.killProcess(processInfo.pid);
+                // Optionally, you can also use:
+                // android.os.Process.sendSignal(processInfo.pid, 9);
+            });
+        }
+    }
+    return true;
+});
+        
+        
         listItemMenu.show();
     }
 

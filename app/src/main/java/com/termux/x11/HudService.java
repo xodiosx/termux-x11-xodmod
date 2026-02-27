@@ -5,12 +5,10 @@ import android.app.ActivityManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -25,23 +23,23 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 import android.widget.FrameLayout;
 
+import com.termux.x11.controller.core.CPUStatus;      // for CPU frequency
+import com.termux.x11.controller.core.StringUtils;    // for memory formatting
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.lang.ref.WeakReference;
-import java.util.ArrayList;
 import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
- * HUD service that shows FPS, CPU temp/usage, GPU info, and memory.
+ * HUD service that shows FPS, CPU temp, CPU frequency %, GPU info, and memory.
  * GPU info is read from /sdcard/gpuinfo (written by the Linux container).
  * Falls back to Android system properties if the file is unavailable.
- *
- * Note: Requires READ_EXTERNAL_STORAGE permission (and request at runtime).
  */
 public class HudService extends Service {
 
@@ -64,15 +62,11 @@ public class HudService extends Service {
     private Thread fpsThread;
     private volatile boolean fpsRunning = true;
 
-    /* ---------- CPU ---------- */
-    private long lastAppCpuTicks = 0;
-    private long lastWallTimeMs = 0;
-
     /* ---------- GPU (simplified) ---------- */
     private volatile String openGLRenderer = "OGL: ...";
     private volatile String vulkanDeviceName = "VK: ...";
 
-    /* ---------- MEM / TEMP ---------- */
+    /* ---------- MEM / TEMP / CPU FREQ ---------- */
     private String totalRam;
 
     /* ===================== SERVICE ===================== */
@@ -91,7 +85,7 @@ public class HudService extends Service {
         mainHandler = new Handler(Looper.getMainLooper());
         totalRam = getTotalRam();
         startFpsReader();
-        startGpuInfoFetcher();   // now only file + fallback
+        startGpuInfoFetcher();
         startHudLoop();
     }
 
@@ -158,116 +152,15 @@ public class HudService extends Service {
         }, 0, 2, TimeUnit.SECONDS);
     }
 
-    /* ===================== GPU INFO FETCHER (file only + fallback) ===================== */
-
-    private void startGpuInfoFetcher() {
-        gpuScheduler = Executors.newSingleThreadScheduledExecutor();
-        gpuScheduler.scheduleAtFixedRate(this::fetchGpuInfo, 0, 5, TimeUnit.SECONDS);
-    }
-
-    private void fetchGpuInfo() {
-        // Try reading from /sdcard/gpuinfo (written by the container)
-        if (readGpuInfoFromFile()) {
-            return;
-        }
-
-        // Fallback to Android system properties
-        fallbackGpuInfo();
-    }
-
-    /**
-     * Reads GPU info from /sdcard/gpuinfo.
-     * Expected format:
-     *   OGL=renderer string
-     *   VK=device name
-     */
-    private boolean readGpuInfoFromFile() {
-        File file = new File(GPU_INFO_FILE);
-        if (!file.exists()) {
-            Log.d(TAG, "GPU info file not found: " + GPU_INFO_FILE);
-            return false;
-        }
-
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
-            String ogl = null;
-            String vk = null;
-            while ((line = br.readLine()) != null) {
-                if (line.startsWith("OGL=")) {
-                    ogl = line.substring(4).trim();
-                } else if (line.startsWith("VK=")) {
-                    vk = line.substring(3).trim();
-                }
-            }
-            boolean updated = false;
-            if (ogl != null && !ogl.isEmpty()) {
-                openGLRenderer = "OGL: " + simplifyGpuString(ogl);
-                updated = true;
-            }
-            if (vk != null && !vk.isEmpty()) {
-                vulkanDeviceName = "VK: " + simplifyGpuString(vk);
-                updated = true;
-            }
-            if (updated) {
-                Log.d(TAG, "GPU info updated from file: " + openGLRenderer + " | " + vulkanDeviceName);
-            }
-            return updated;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to read GPU info file", e);
-            return false;
-        }
-    }
-
-    private void fallbackGpuInfo() {
-        String ogl = getProp("ro.hardware.egl");
-        String vk = getProp("ro.hardware.vulkan");
-        if (ogl == null || ogl.isEmpty()) ogl = getProp("ro.board.platform");
-        if (vk == null || vk.isEmpty()) vk = ogl;
-
-        openGLRenderer = "OGL: " + simplifyGpuString(ogl != null ? ogl : "Unknown");
-        vulkanDeviceName = "VK: " + simplifyGpuString(vk != null ? vk : "Unknown");
-        Log.d(TAG, "Fallback to Android props: " + openGLRenderer + " | " + vulkanDeviceName);
-    }
-
-    /**
-     * Simplifies a GPU name to a short identifier.
-     * - Looks for known keywords (case‑insensitive) and returns the first match.
-     * - If no keyword matches, returns the first word.
-     */
-    private String simplifyGpuString(String raw) {
-    if (raw == null || raw.isEmpty()) return "?";
-
-    String lower = raw.toLowerCase();
-    // Prioritise driver names, then hardware names
-    String[] keywords = {
-        // Software / wrapper renderers
-        "gl4es", "zink", "virgl", "softpipe", "swrast", "llvm",
-        // Vulkan drivers
-        "turnip", "venus", "wrapper", "panfrost", "v3d",
-        // Hardware brands (lower priority)
-        "adreno", "mali", "powervr", "nvidia", "geforce", "radeon", "amd", "intel", "iris", "virtio"
-    };
-
-    for (String kw : keywords) {
-        if (lower.contains(kw)) {
-            int idx = lower.indexOf(kw);
-            return raw.substring(idx, idx + kw.length());
-        }
-    }
-
-    // Fallback: first word
-    String[] parts = raw.trim().split("\\s+");
-    return parts[0];
-}
     /* ===================== BUILD HUD TEXT ===================== */
 
     private String buildHudText() {
         String fps = fpsText;
         String temp = getCpuTemp();
-        String cpu = getCpuUsage();
-        String mem = getMemoryInfo();
+        String cpuFreq = getCpuFreqPercent();          // now uses CPUStatus
+        String mem = getMemoryInfo();                   // uses StringUtils internally
 
-        return fps + " | " + temp + " | " + cpu + " | " +
+        return fps + " | " + temp + " | " + cpuFreq + " | " +
                openGLRenderer + " | " + vulkanDeviceName + " | " + mem;
     }
 
@@ -279,7 +172,11 @@ public class HudService extends Service {
         float tempVal = getCpuTempValue();
         color(s, getCpuTemp(), tempColor(tempVal));
 
-        color(s, getCpuUsage(), Color.YELLOW);
+        // Color CPU frequency based on percentage
+        int cpuFreqPercent = getCpuFreqRawPercent();
+        color(s, getCpuFreqPercent(), cpuFreqPercent < 20 ? Color.RED :
+                (cpuFreqPercent < 50 ? Color.YELLOW : Color.GREEN));
+
         color(s, openGLRenderer, Color.MAGENTA);
         color(s, vulkanDeviceName, Color.MAGENTA);
 
@@ -370,86 +267,39 @@ public class HudService extends Service {
         } catch (Exception ignored) {}
     }
 
-    /* ===================== CPU USAGE ===================== */
+    /* ===================== CPU FREQUENCY PERCENTAGE (matches task manager) ===================== */
 
-    private int[] getAppPids() {
-        int uid = android.os.Process.myUid();
-        ArrayList<Integer> pids = new ArrayList<>();
+    /**
+     * Returns a string like "CPUf: 45%" based on average current frequency / max frequency.
+     */
+    private String getCpuFreqPercent() {
+        int percent = getCpuFreqRawPercent();
+        if (percent < 0) return "CPUf: N/A";
+        return "CPUf: " + percent + "%";
+    }
 
-        File proc = new File("/proc");
-        File[] files = proc.listFiles();
-        if (files == null) return new int[0];
+    /**
+     * Returns raw percentage (0–100) or -1 if unable to read.
+     */
+    private int getCpuFreqRawPercent() {
+        try {
+            short[] current = CPUStatus.getCurrentClockSpeeds();
+            if (current == null || current.length == 0) return -1;
 
-        for (File f : files) {
-            if (!f.isDirectory()) continue;
-
-            int pid;
-            try {
-                pid = Integer.parseInt(f.getName());
-            } catch (NumberFormatException e) {
-                continue;
+            int totalCurrent = 0;
+            int totalMax = 0;
+            for (int i = 0; i < current.length; i++) {
+                short max = CPUStatus.getMaxClockSpeed(i);
+                if (max <= 0) return -1;   // invalid max
+                totalCurrent += current[i];
+                totalMax += max;
             }
-
-            try (BufferedReader br =
-                         new BufferedReader(new FileReader("/proc/" + pid + "/status"))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    if (line.startsWith("Uid:")) {
-                        String[] parts = line.split("\\s+");
-                        int procUid = Integer.parseInt(parts[1]);
-                        if (procUid == uid) {
-                            pids.add(pid);
-                        }
-                        break;
-                    }
-                }
-            } catch (Exception ignored) {}
-        }
-
-        int[] out = new int[pids.size()];
-        for (int i = 0; i < pids.size(); i++) out[i] = pids.get(i);
-        return out;
-    }
-
-    private long readProcessCpuTicks(int pid) {
-        try (BufferedReader br =
-                     new BufferedReader(new FileReader("/proc/" + pid + "/stat"))) {
-
-            String[] t = br.readLine().split("\\s+");
-            long utime = Long.parseLong(t[13]);
-            long stime = Long.parseLong(t[14]);
-            return utime + stime;
-
+            // average percentage = (totalCurrent / totalMax) * 100
+            return (int) ((totalCurrent * 100L) / totalMax);
         } catch (Exception e) {
-            return 0;
+            Log.e(TAG, "Failed to read CPU frequencies", e);
+            return -1;
         }
-    }
-
-    private String getCpuUsage() {
-        long now = SystemClock.elapsedRealtime();
-        int[] pids = getAppPids();
-
-        long totalCpuTicks = 0;
-        for (int pid : pids) {
-            totalCpuTicks += readProcessCpuTicks(pid);
-        }
-
-        if (lastWallTimeMs == 0) {
-            lastWallTimeMs = now;
-            lastAppCpuTicks = totalCpuTicks;
-            return "CPU: ...";
-        }
-
-        long dCpu = totalCpuTicks - lastAppCpuTicks;
-        long dTime = now - lastWallTimeMs;
-
-        lastWallTimeMs = now;
-        lastAppCpuTicks = totalCpuTicks;
-
-        if (dTime <= 0) return "CPU: 0%";
-
-        float usage = (dCpu * 1000f) / dTime;
-        return String.format(Locale.US, "CPU: %.1f%%", usage);
     }
 
     /* ===================== CPU TEMPERATURE ===================== */
@@ -486,21 +336,22 @@ public class HudService extends Service {
         return -1;
     }
 
-    /* ===================== MEMORY ===================== */
+    /* ===================== MEMORY (using StringUtils) ===================== */
 
     private String getMemoryInfo() {
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
         long used = mi.totalMem - mi.availMem;
-        return "MEM: " + formatBytes(used) + " / " + totalRam;
+        // Use StringUtils.formatBytes with shortFormat = false (like task manager)
+        return "MEM: " + StringUtils.formatBytes(used, false) + " / " + totalRam;
     }
 
     private String getTotalRam() {
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
         am.getMemoryInfo(mi);
-        return formatBytes(mi.totalMem);
+        return StringUtils.formatBytes(mi.totalMem, false);
     }
 
     private long getAvailableMemoryMB() {
@@ -514,13 +365,78 @@ public class HudService extends Service {
         }
     }
 
-    private String formatBytes(long b) {
-        int e = (int) (Math.log(b) / Math.log(1024));
-        return String.format(Locale.US, "%.1f %sB",
-                b / Math.pow(1024, e), "KMGTPE".charAt(e - 1));
+    /* ===================== GPU INFO FETCHER (unchanged) ===================== */
+
+    private void startGpuInfoFetcher() {
+        gpuScheduler = Executors.newSingleThreadScheduledExecutor();
+        gpuScheduler.scheduleAtFixedRate(this::fetchGpuInfo, 0, 5, TimeUnit.SECONDS);
     }
 
-    /* ===================== SYSTEM PROPERTY HELPER ===================== */
+    private void fetchGpuInfo() {
+        if (readGpuInfoFromFile()) {
+            return;
+        }
+        fallbackGpuInfo();
+    }
+
+    private boolean readGpuInfoFromFile() {
+        File file = new File(GPU_INFO_FILE);
+        if (!file.exists()) return false;
+
+        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
+            String ogl = null;
+            String vk = null;
+            while ((line = br.readLine()) != null) {
+                if (line.startsWith("OGL=")) {
+                    ogl = line.substring(4).trim();
+                } else if (line.startsWith("VK=")) {
+                    vk = line.substring(3).trim();
+                }
+            }
+            boolean updated = false;
+            if (ogl != null && !ogl.isEmpty()) {
+                openGLRenderer = "OGL: " + simplifyGpuString(ogl);
+                updated = true;
+            }
+            if (vk != null && !vk.isEmpty()) {
+                vulkanDeviceName = "VK: " + simplifyGpuString(vk);
+                updated = true;
+            }
+            return updated;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to read GPU info file", e);
+            return false;
+        }
+    }
+
+    private void fallbackGpuInfo() {
+        String ogl = getProp("ro.hardware.egl");
+        String vk = getProp("ro.hardware.vulkan");
+        if (ogl == null || ogl.isEmpty()) ogl = getProp("ro.board.platform");
+        if (vk == null || vk.isEmpty()) vk = ogl;
+
+        openGLRenderer = "OGL: " + simplifyGpuString(ogl != null ? ogl : "Unknown");
+        vulkanDeviceName = "VK: " + simplifyGpuString(vk != null ? vk : "Unknown");
+    }
+
+    private String simplifyGpuString(String raw) {
+        if (raw == null || raw.isEmpty()) return "?";
+        String lower = raw.toLowerCase();
+        String[] keywords = {
+            "gl4es", "zink", "virgl", "softpipe", "swrast", "llvm",
+            "turnip", "venus", "wrapper", "panfrost", "v3d",
+            "adreno", "mali", "powervr", "nvidia", "geforce", "radeon", "amd", "intel", "iris", "virtio"
+        };
+        for (String kw : keywords) {
+            if (lower.contains(kw)) {
+                int idx = lower.indexOf(kw);
+                return raw.substring(idx, idx + kw.length());
+            }
+        }
+        String[] parts = raw.trim().split("\\s+");
+        return parts[0];
+    }
 
     private String getProp(String key) {
         try {
