@@ -495,7 +495,7 @@ mRenderData.offsetX = offsetX;
             // Cancel the notification
             NotificationManager nm = (NotificationManager) mActivity.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
-                nm.cancel(MainActivity.NOTIFICATION_ID);
+                nm.cancel(MainActivity.mNotificationId);
             }
             
             // Small delay to allow cancellation to be processed
