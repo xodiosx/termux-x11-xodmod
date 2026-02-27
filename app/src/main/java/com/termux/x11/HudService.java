@@ -5,6 +5,7 @@ import android.app.ActivityManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Typeface;
@@ -35,10 +36,17 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * HUD service that shows FPS, CPU temp/usage, GPU info, and memory.
+ * GPU info is read from /sdcard/gpuinfo (written by the Linux container).
+ * Falls back to Android system properties if the file is unavailable.
+ *
+ * Note: Requires READ_EXTERNAL_STORAGE permission (and request at runtime).
+ */
 public class HudService extends Service {
 
     private static final String TAG = "HudService";
-    private static final String GPU_INFO_FILE = "gpuinfo"; // in getFilesDir()
+    private static final String GPU_INFO_FILE = "/sdcard/gpuinfo";
 
     /* ---------- ACTIVITY ATTACHMENT ---------- */
     private WeakReference<Activity> activityRef;
@@ -83,7 +91,7 @@ public class HudService extends Service {
         mainHandler = new Handler(Looper.getMainLooper());
         totalRam = getTotalRam();
         startFpsReader();
-        startGpuInfoFetcher();
+        startGpuInfoFetcher();   // now only file + fallback
         startHudLoop();
     }
 
@@ -150,7 +158,7 @@ public class HudService extends Service {
         }, 0, 2, TimeUnit.SECONDS);
     }
 
-    /* ===================== GPU INFO FETCHER ===================== */
+    /* ===================== GPU INFO FETCHER (file only + fallback) ===================== */
 
     private void startGpuInfoFetcher() {
         gpuScheduler = Executors.newSingleThreadScheduledExecutor();
@@ -158,34 +166,27 @@ public class HudService extends Service {
     }
 
     private void fetchGpuInfo() {
-        // Try file first (written by the container)
+        // Try reading from /sdcard/gpuinfo (written by the container)
         if (readGpuInfoFromFile()) {
             return;
         }
 
-        // Then try environment variables (set in Termux X11 launch environment)
-        if (readGpuInfoFromEnv()) {
-            return;
-        }
-
-        // Then try running commands inside the container
-        if (readGpuInfoFromContainer()) {
-            return;
-        }
-
-        // Finally fall back to Android system properties
+        // Fallback to Android system properties
         fallbackGpuInfo();
     }
 
     /**
-     * Reads GPU info from a file in the app's private storage.
+     * Reads GPU info from /sdcard/gpuinfo.
      * Expected format:
      *   OGL=renderer string
      *   VK=device name
      */
     private boolean readGpuInfoFromFile() {
-        File file = new File(getFilesDir(), GPU_INFO_FILE);
-        if (!file.exists()) return false;
+        File file = new File(GPU_INFO_FILE);
+        if (!file.exists()) {
+            Log.d(TAG, "GPU info file not found: " + GPU_INFO_FILE);
+            return false;
+        }
 
         try (BufferedReader br = new BufferedReader(new FileReader(file))) {
             String line;
@@ -198,79 +199,23 @@ public class HudService extends Service {
                     vk = line.substring(3).trim();
                 }
             }
+            boolean updated = false;
             if (ogl != null && !ogl.isEmpty()) {
                 openGLRenderer = "OGL: " + simplifyGpuString(ogl);
+                updated = true;
             }
             if (vk != null && !vk.isEmpty()) {
                 vulkanDeviceName = "VK: " + simplifyGpuString(vk);
+                updated = true;
             }
-            return (ogl != null && !ogl.isEmpty()) || (vk != null && !vk.isEmpty());
+            if (updated) {
+                Log.d(TAG, "GPU info updated from file: " + openGLRenderer + " | " + vulkanDeviceName);
+            }
+            return updated;
         } catch (Exception e) {
-            Log.d(TAG, "Failed to read GPU info file", e);
+            Log.e(TAG, "Failed to read GPU info file", e);
             return false;
         }
-    }
-
-    /**
-     * Reads GPU info from environment variables OGLGPU and VKGPU.
-     */
-    private boolean readGpuInfoFromEnv() {
-        String envOgl = System.getenv("OGLGPU");
-        String envVk = System.getenv("VKGPU");
-        boolean updated = false;
-
-        if (envOgl != null && !envOgl.trim().isEmpty()) {
-            openGLRenderer = "OGL: " + simplifyGpuString(envOgl.trim());
-            updated = true;
-        }
-        if (envVk != null && !envVk.trim().isEmpty()) {
-            vulkanDeviceName = "VK: " + simplifyGpuString(envVk.trim());
-            updated = true;
-        }
-        return updated;
-    }
-
-    /**
-     * Runs glxinfo and vulkaninfo inside the container (inheriting DISPLAY/PATH).
-     */
-    private boolean readGpuInfoFromContainer() {
-        try {
-            String[] cmd = {
-                    "/sysystem/bin/sh", "-c",
-                    "export DISPLAY=$DISPLAY; export PATH=$PATH; " +
-                    "OGLGPU=$OGLGPU" +
-                    "VKGPU=$VKGPU" +
-                    "echo \"OGL:$OGLGPU\"; echo \"VK:$VKGPU\""
-            };
-
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.redirectErrorStream(true);
-            Process process = pb.start();
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            String ogl = null;
-            String vk = null;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("OGL:")) {
-                    ogl = line.substring(4).trim();
-                    if (ogl.isEmpty()) ogl = null;
-                } else if (line.startsWith("VK:")) {
-                    vk = line.substring(3).trim();
-                    if (vk.isEmpty()) vk = null;
-                }
-            }
-            int exitCode = process.waitFor();
-
-            if (exitCode == 0 && (ogl != null || vk != null)) {
-                if (ogl != null) openGLRenderer = "OGL: " + simplifyGpuString(ogl);
-                if (vk != null) vulkanDeviceName = "VK: " + simplifyGpuString(vk);
-                return true;
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to run container GPU commands", e);
-        }
-        return false;
     }
 
     private void fallbackGpuInfo() {
@@ -281,6 +226,7 @@ public class HudService extends Service {
 
         openGLRenderer = "OGL: " + simplifyGpuString(ogl != null ? ogl : "Unknown");
         vulkanDeviceName = "VK: " + simplifyGpuString(vk != null ? vk : "Unknown");
+        Log.d(TAG, "Fallback to Android props: " + openGLRenderer + " | " + vulkanDeviceName);
     }
 
     /**
@@ -298,6 +244,7 @@ public class HudService extends Service {
             "panfrost", "v3d", "vc4", "nvidia", "geforce", "radeon",
             "amd", "intel", "iris", "crocus", "zink", "lavapipe"
         };
+
 
         for (String kw : keywords) {
             if (lower.contains(kw)) {
