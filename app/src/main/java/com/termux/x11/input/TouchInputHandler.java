@@ -4,7 +4,6 @@
 
 package com.termux.x11.input;
 
-import android.app.NotificationManager;
 import static android.view.InputDevice.KEYBOARD_TYPE_ALPHABETIC;
 import static android.view.KeyEvent.KEYCODE_BACK;
 import static android.view.KeyEvent.KEYCODE_VOLUME_DOWN;
@@ -489,21 +488,7 @@ mRenderData.offsetX = offsetX;
             case "open preferences": return (key, down) -> { if (down) mActivity.startActivity(new Intent(mActivity, LoriePreferences.class) {{ setAction(Intent.ACTION_MAIN); }}); };
             case "release pointer and keyboard capture": return (key, down) -> { if (down) setCapturingEnabled(false); };
             case "toggle fullscreen": return (key, down) -> { if (down) MainActivity.prefs.fullscreen.put(!MainActivity.prefs.fullscreen.get()); };
-            case "exit": 
-    return (key, down) -> { 
-        if (down) {
-            // Cancel the notification
-            NotificationManager nm = (NotificationManager) mActivity.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                nm.cancel(MainActivity.mNotificationId);
-            }
-            
-            // Small delay to allow cancellation to be processed
-            new Handler(mActivity.getMainLooper()).postDelayed(() -> {
-                android.os.Process.killProcess(android.os.Process.myPid());
-            }, 100);
-        }
-    };
+            case "exit": return (key, down) -> { if (down) mActivity.finish(); };
             case "send volume up": return (key, down) -> mActivity.getLorieView().sendKeyEvent(0, KEYCODE_VOLUME_UP, down);
             case "send volume down": return (key, down) -> mActivity.getLorieView().sendKeyEvent(0, KEYCODE_VOLUME_DOWN, down);
             case "send media action": return (key, down) -> mActivity.getLorieView().sendKeyEvent(0, key, down);

@@ -1476,10 +1476,10 @@ isResumed = true;
     public void onPause() {
   //  inputMethodManager.hideSoftInputFromWindow(getWindow().getDecorView().getRootView().getWindowToken(), 0);
 
-     /*   for (StatusBarNotification notification: mNotificationManager.getActiveNotifications())
+        for (StatusBarNotification notification: mNotificationManager.getActiveNotifications())
             if (notification.getId() == mNotificationId)
                 mNotificationManager.cancel(mNotificationId);
-*/
+
         super.onPause();
         isResumed = false;
         finish();
