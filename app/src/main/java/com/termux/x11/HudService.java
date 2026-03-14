@@ -253,7 +253,7 @@ public void stopFpsReader() {
                         "logcat", "-s", "LorieNative:I", "-v", "brief"
                 );
                 pb.redirectErrorStream(true);
-                PlogcatProcess = pb.start();
+                logcatProcess = pb.start();
 BufferedReader br = new BufferedReader(
         new InputStreamReader(logcatProcess.getInputStream()));
 
