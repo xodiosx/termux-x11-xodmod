@@ -69,7 +69,7 @@ public class HudService extends Service {
 
     /* ---------- MEM / TEMP / CPU FREQ ---------- */
     private String totalRam;
-
+   private Process logcatProcess;
     /* ===================== SERVICE ===================== */
 
     public class LocalBinder extends Binder {
@@ -232,8 +232,20 @@ public class HudService extends Service {
     }
 
     /* ===================== FPS READER ===================== */
+public void stopFpsReader() {
+    fpsRunning = false;
+    if (logcatProcess != null) {
+        logcatProcess.destroy();
+        logcatProcess = null;
+    }
+    if (fpsThread != null && fpsThread.isAlive()) {
+        fpsThread.interrupt();
+        fpsThread = null;
+    }
+}
 
     private void startFpsReader() {
+    if (logcatProcess != null) return;
         fpsThread = new Thread(() -> {
             try {
                 Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
@@ -241,8 +253,9 @@ public class HudService extends Service {
                         "logcat", "-s", "LorieNative:I", "-v", "brief"
                 );
                 pb.redirectErrorStream(true);
-                Process p = pb.start();
-                BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                PlogcatProcess = pb.start();
+BufferedReader br = new BufferedReader(
+        new InputStreamReader(logcatProcess.getInputStream()));
 
                 String line;
                 while (fpsRunning && (line = br.readLine()) != null) {
@@ -455,6 +468,10 @@ public class HudService extends Service {
     public void onDestroy() {
         fpsRunning = false;
         detach();
+        if (logcatProcess != null) {
+    logcatProcess.destroy();
+    logcatProcess = null;
+}
         if (hudScheduler != null) hudScheduler.shutdownNow();
         if (gpuScheduler != null) gpuScheduler.shutdownNow();
         super.onDestroy();

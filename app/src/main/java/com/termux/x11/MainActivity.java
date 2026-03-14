@@ -1479,7 +1479,11 @@ isResumed = true;
         for (StatusBarNotification notification: mNotificationManager.getActiveNotifications())
             if (notification.getId() == mNotificationId)
                 mNotificationManager.cancel(mNotificationId);
-
+   
+     if (isBound && hudService != null) {
+        hudService.detach();
+        hudService.stopFpsReader(); // <--- stop logcat here
+    }
         super.onPause();
         isResumed = false;
         finish();
