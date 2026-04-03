@@ -124,20 +124,19 @@ public class HudService extends Service {
     }
 
     public void detach() {
-        mainHandler.post(() -> {
-            if (!attached || hudView == null) return;
-            Activity act = activityRef != null ? activityRef.get() : null;
-            if (act == null) return;
+    mainHandler.post(() -> {
+        if (!attached || hudView == null) return;
+        Activity act = activityRef != null ? activityRef.get() : null;
+        if (act == null) return;
 
-            ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
-            decor.removeView(hudView);
-            hudView = null;
-            attached = false;
-            Log.d(TAG, "HUD detached");
-            stopFpsReader();
+        ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
+        decor.removeView(hudView);
+        hudView = null;
+        attached = false;
+        Log.d(TAG, "HUD detached");
+        stopFpsReader();   // kill logcat process immediately
+    });
 }
-        });
-    }
 
     /* ===================== HUD UPDATE LOOP ===================== */
 
@@ -263,6 +262,11 @@ public void stopFpsReader() {
                     new InputStreamReader(logcatProcess.getInputStream()));
             String line;
             while (fpsRunning && (line = br.readLine()) != null) {
+            // AUTO STOP CONDITION
+                if (!hudVisible) {
+                    stopFpsReader();
+                    break;
+                }
                 if (line.contains("FPS")) parseFps(line);
             }
         } catch (Exception e) {
