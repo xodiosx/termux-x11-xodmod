@@ -1480,10 +1480,7 @@ isResumed = true;
             if (notification.getId() == mNotificationId)
                 mNotificationManager.cancel(mNotificationId);
    
-     if (isBound && hudService != null) {
-        hudService.detach();
-        hudService.stopFpsReader(); // <--- stop logcat here
-    }
+     
         super.onPause();
         isResumed = false;
         finish();
@@ -2083,21 +2080,7 @@ public static class DrawerPreferenceFragment extends PreferenceFragmentCompat
     }
 
     private void startHudService() {
-  //  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(activity)) {
-        // Request permission
-      //  Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-           //     Uri.parse("package:" + activity.getPackageName()));
-      //  activity.startActivityForResult(intent, 1001);
-
-        // Revert the switch
-    //    SwitchPreferenceCompat hudSwitch = findPreference("hud_enabled");
-   //     if (hudSwitch != null) hudSwitch.setChecked(false);
-
-   //     Toast.makeText(activity, "Please grant overlay permission", Toast.LENGTH_LONG).show();
-//      return;
-//    }
-
-    activity.startHudService();   // <-- use activity's method
+    activity.startHudService();
     Toast.makeText(activity, "HUD started", Toast.LENGTH_SHORT).show();
     activity.drawerLayout.closeDrawer(GravityCompat.START);
 }

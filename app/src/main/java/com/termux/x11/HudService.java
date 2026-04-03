@@ -118,6 +118,7 @@ public class HudService extends Service {
             ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
             decor.addView(hudView, params);
             attached = true;
+            startFpsReader(); 
             Log.d(TAG, "HUD attached to activity");
         });
     }
@@ -133,6 +134,8 @@ public class HudService extends Service {
             hudView = null;
             attached = false;
             Log.d(TAG, "HUD detached");
+            stopFpsReader();
+}
         });
     }
 
@@ -244,31 +247,31 @@ public void stopFpsReader() {
     }
 }
 
-    private void startFpsReader() {
-    if (logcatProcess != null) return;
-        fpsThread = new Thread(() -> {
-            try {
-                Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
-                ProcessBuilder pb = new ProcessBuilder(
-                        "logcat", "-s", "LorieNative:I", "-v", "brief"
-                );
-                pb.redirectErrorStream(true);
-                logcatProcess = pb.start();
-BufferedReader br = new BufferedReader(
-        new InputStreamReader(logcatProcess.getInputStream()));
 
-                String line;
-                while (fpsRunning && (line = br.readLine()) != null) {
-                    if (!line.contains("FPS")) continue;
-                    parseFps(line);
-                }
-            } catch (Exception e) {
-                Log.e(TAG, "FPS reader error", e);
+    private void startFpsReader() {
+    if (fpsThread != null && fpsThread.isAlive()) return;
+    fpsRunning = true;
+    fpsThread = new Thread(() -> {
+        try {
+            Runtime.getRuntime().exec(new String[]{"logcat", "-c"}).waitFor();
+            ProcessBuilder pb = new ProcessBuilder(
+                    "logcat", "-s", "LorieNative:I", "-v", "brief"
+            );
+            pb.redirectErrorStream(true);
+            logcatProcess = pb.start();
+            BufferedReader br = new BufferedReader(
+                    new InputStreamReader(logcatProcess.getInputStream()));
+            String line;
+            while (fpsRunning && (line = br.readLine()) != null) {
+                if (line.contains("FPS")) parseFps(line);
             }
-        }, "FPS-Reader");
-        fpsThread.setDaemon(true);
-        fpsThread.start();
-    }
+        } catch (Exception e) {
+            Log.e(TAG, "FPS reader error", e);
+        }
+    }, "FPS-Reader");
+    fpsThread.setDaemon(true);
+    fpsThread.start();
+}
 
     private void parseFps(String line) {
         int idx = line.lastIndexOf('=');
