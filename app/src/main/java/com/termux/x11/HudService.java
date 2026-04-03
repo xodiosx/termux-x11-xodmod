@@ -46,7 +46,7 @@ public class HudService extends Service {
 
     private static final String TAG = "HudService";
     private static final String GPU_INFO_FILE = "/sdcard/gpuinfo";
-
+private volatile boolean hudVisible = false;   // tracks if HUD is attached
     /* ---------- ACTIVITY ATTACHMENT ---------- */
     private WeakReference<Activity> activityRef;
     private TextView hudView;
@@ -88,6 +88,7 @@ public class HudService extends Service {
         startFpsReader();
         startGpuInfoFetcher();
         startHudLoop();
+        
     }
 
     /* ===================== ACTIVITY BINDING ===================== */
@@ -118,6 +119,7 @@ public class HudService extends Service {
             ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
             decor.addView(hudView, params);
             attached = true;
+            hudVisible = true; 
             startFpsReader(); 
             Log.d(TAG, "HUD attached to activity");
         });
@@ -132,6 +134,7 @@ public class HudService extends Service {
         ViewGroup decor = (ViewGroup) act.getWindow().getDecorView();
         decor.removeView(hudView);
         hudView = null;
+        hudVisible = false; 
         attached = false;
         Log.d(TAG, "HUD detached");
         stopFpsReader();   // kill logcat process immediately
