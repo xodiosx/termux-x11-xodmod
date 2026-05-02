@@ -31,6 +31,7 @@ public class Loader {
     targetInfo.applicationInfo.sourceDir,
     targetInfo.applicationInfo.nativeLibraryDir,   // <-- ADD THIS
     ClassLoader.getSystemClassLoader()
+    )
 );
                 targetClass.getMethod("main", String[].class).invoke(null, (Object) args);
             } catch (AssertionError e) {
