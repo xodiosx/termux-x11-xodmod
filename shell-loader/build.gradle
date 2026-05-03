@@ -17,7 +17,7 @@ android {
 android.buildFeatures.buildConfig true
 android.namespace 'com.termux.shell'
 android.defaultConfig.minSdkVersion 21
-android.defaultConfig.applicationId 'com.xodos'
+android.defaultConfig.applicationId 'com.termux.x11'
 android.buildTypes.debug.signingConfig null
 android.buildFeatures.buildConfig true
 android.compileOptions.sourceCompatibility JavaVersion.VERSION_1_8
