@@ -3,7 +3,8 @@ package com.termux.x11;
 import android.content.Context;
 import android.os.Build;
 import android.os.Environment;
-import android.os.Process;   // Android Process (PID)
+import android.os.Process;
+import android.util.Log;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -13,13 +14,16 @@ import java.io.InputStreamReader;
 public class LogcatLogger {
 
     private static Thread loggerThread;
-    private static boolean running = false;
+    private static volatile boolean running = false;
+    private static java.lang.Process logcatProcess;
+    private static FileWriter writer;
 
-    public static void start(Context context) {
+    public static synchronized void start(Context context) {
         if (running) return;
+
         running = true;
 
-        int myPid = Process.myPid(); // android.os.Process
+        int myPid = Process.myPid();
 
         loggerThread = new Thread(() -> {
             try {
@@ -33,13 +37,13 @@ public class LogcatLogger {
                 if (!dir.exists()) dir.mkdirs();
 
                 File logFile = new File(dir, "app.log");
-                FileWriter writer = new FileWriter(logFile, true);
+                writer = new FileWriter(logFile, true);
 
                 Runtime.getRuntime().exec("logcat -c");
 
-                // ⚠ IMPORTANT: java.lang.Process (fully qualified)
-                java.lang.Process logcatProcess =
-                        Runtime.getRuntime().exec(new String[]{"logcat", "-v", "time"});
+                logcatProcess = Runtime.getRuntime().exec(
+                        new String[]{"logcat", "-v", "time"}
+                );
 
                 BufferedReader reader = new BufferedReader(
                         new InputStreamReader(logcatProcess.getInputStream())
@@ -47,24 +51,45 @@ public class LogcatLogger {
 
                 String line;
                 while (running && (line = reader.readLine()) != null) {
+                    if (!running) break;
+
                     if (line.contains(String.valueOf(myPid))) {
                         writer.write(line + "\n");
                         writer.flush();
                     }
                 }
 
-                writer.close();
-
             } catch (Exception e) {
-                e.printStackTrace();
+                Log.e("LogcatLogger", "Error", e);
+            } finally {
+                cleanup();
             }
         });
 
         loggerThread.start();
     }
 
-    public static void stop() {
+    public static synchronized void stop() {
         running = false;
+        cleanup();
+    }
+
+    private static void cleanup() {
+        try {
+            if (logcatProcess != null) {
+                logcatProcess.destroy();
+                logcatProcess = null;
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            if (writer != null) {
+                writer.flush();
+                writer.close();
+                writer = null;
+            }
+        } catch (Exception ignored) {}
+
         if (loggerThread != null) {
             loggerThread.interrupt();
             loggerThread = null;

@@ -1479,18 +1479,18 @@ isResumed = true;
         for (StatusBarNotification notification: mNotificationManager.getActiveNotifications())
             if (notification.getId() == mNotificationId)
                 mNotificationManager.cancel(mNotificationId);
-   
-     
+        
         super.onPause();
         isResumed = false;
 if (!isInPictureInPictureMode()) {
     finish();
 }
-
         //prepareToExit();
     if (isBound && hudService != null) {
         hudService.detach();
     }
+    stopHudService();  
+LogcatLogger.stop();
     }
 
     public LorieView getLorieView() {

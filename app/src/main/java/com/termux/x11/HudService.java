@@ -85,7 +85,7 @@ private volatile boolean hudVisible = false;   // tracks if HUD is attached
         super.onCreate();
         mainHandler = new Handler(Looper.getMainLooper());
         totalRam = getTotalRam();
-        startFpsReader();
+     //   startFpsReader();
         startGpuInfoFetcher();
         startHudLoop();
         
@@ -251,6 +251,7 @@ public void stopFpsReader() {
 
 
     private void startFpsReader() {
+    if (!hudVisible) return;
     if (fpsThread != null && fpsThread.isAlive()) return;
     fpsRunning = true;
     fpsThread = new Thread(() -> {

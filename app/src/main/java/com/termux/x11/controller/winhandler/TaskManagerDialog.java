@@ -1,6 +1,5 @@
 package com.termux.x11.controller.winhandler;
 
-import android.widget.Toast;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Build;
@@ -12,6 +11,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.PopupMenu;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.termux.x11.MainActivity;
 import com.termux.x11.R;
@@ -21,6 +21,8 @@ import com.termux.x11.controller.core.ProcessHelper;
 import com.termux.x11.controller.core.StringUtils;
 import com.termux.x11.controller.widget.CPUListView;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -31,6 +33,10 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
     private Timer timer;
     private final Object lock = new Object();
 
+    // Dynamically set in initEnvironment()
+    private String[] env;
+    private String shellPath;
+
     public TaskManagerDialog(MainActivity activity) {
         super(activity, R.layout.task_manager_dialog);
         this.activity = activity;
@@ -38,11 +44,23 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
         setTitle(R.string.task_manager);
         setIcon(R.drawable.icon_task_manager);
 
+        // Set up the correct environment before building UI
+        initEnvironment();
+
         Button cancelButton = findViewById(R.id.BTCancel);
         cancelButton.setText(R.string.new_task);
         cancelButton.setOnClickListener((v) -> {
             dismiss();
-            ContentDialog.prompt(activity, R.string.new_task, "taskmgr.exe", (command) -> activity.getWinHandler().exec(command));
+            ContentDialog.prompt(activity, R.string.new_task, "taskmgr.exe", (command) -> {
+                if (command == null || command.trim().isEmpty()) return;
+                String cmd = command.trim();
+                if (cmd.toLowerCase().endsWith(".exe")) {
+                    runNativeCommand("runwine " + cmd);
+                } else {
+                    runNativeCommand(cmd);
+                }
+                Toast.makeText(activity, "Running: " + cmd, Toast.LENGTH_SHORT).show();
+            });
         });
 
         setOnDismissListener((dialog) -> {
@@ -58,10 +76,75 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
         inflater = LayoutInflater.from(activity);
     }
 
+    /**
+     * Determines the base directory, DISPLAY, and shell path based on
+     * which environment (Termux or Xodos) is accessible.
+     */
+    private void initEnvironment() {
+        String baseDir;
+        String display;
+
+        // Check which app's data directory exists
+        if (new File("/data/data/com.termux/files").exists()) {
+            baseDir = "/data/data/com.termux/files";
+        } else {
+            baseDir = "/data/data/com.xodos/files";
+        }
+
+        // DISPLAY: use system variable if set, otherwise default for each environment
+        String systemDisplay = System.getenv("DISPLAY");
+        if (systemDisplay != null && !systemDisplay.isEmpty()) {
+            display = systemDisplay;
+        } else if (baseDir.contains("com.termux")) {
+            display = ":0";
+        } else {
+            display = ":4";
+        }
+
+        // Build environment array
+        env = new String[] {
+            "PREFIX=" + baseDir + "/usr",
+            "HOME=" + baseDir + "/home",
+            "TMPDIR=" + baseDir + "/usr/tmp",
+            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + baseDir + "/usr/bin",
+            "DISPLAY=" + display,
+            "XDG_RUNTIME_DIR=" + baseDir + "/usr/tmp"
+        };
+
+        // Shell path
+        shellPath = baseDir + "/usr/bin/bash";
+    }
+
+    private void runNativeCommand(String command) {
+        new Thread(() -> {
+            try {
+                Process proc = Runtime.getRuntime().exec(
+                    new String[] { shellPath, "-c", command },
+                    env
+                );
+                proc.getOutputStream().close();
+                new Thread(() -> consumeStream(proc.getInputStream())).start();
+                new Thread(() -> consumeStream(proc.getErrorStream())).start();
+                proc.waitFor();
+            } catch (IOException e) {
+                activity.runOnUiThread(() ->
+                    Toast.makeText(activity, "Failed to run: " + command, Toast.LENGTH_SHORT).show()
+                );
+            } catch (InterruptedException ignored) {}
+        }).start();
+    }
+
+    private void consumeStream(java.io.InputStream in) {
+        try {
+            byte[] buf = new byte[1024];
+            while (in.read(buf) != -1) {}
+        } catch (IOException ignored) {}
+    }
+
+    // ---------- Rest of the original methods (unchanged) ----------
     private void update() {
         synchronized (lock) {
             activity.getWinHandler().listProcesses();
-
             final LinearLayout container = findViewById(R.id.LLProcessList);
             if (container.getChildCount() == 0) {
                 listAndroidProcess();
@@ -69,69 +152,48 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
                     findViewById(R.id.TVEmptyText).setVisibility(View.VISIBLE);
                 }
             }
-
         }
-
         updateCPUInfoView();
         updateMemoryInfoView();
     }
 
     private void listAndroidProcess() {
         List<ProcessInfo> processInfoList = activity.getTermuxProcessorInfo("0");
-        if (processInfoList == null) {
-            return;
-        }
+        if (processInfoList == null) return;
         int idx = 0;
         for (ProcessInfo processInfo : processInfoList) {
             onGetProcessInfo(idx, processInfoList.size(), processInfo);
             idx++;
         }
-//        ActivityManager activityManager = (ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE);
-//        List<ActivityManager.RunningAppProcessInfo> runningAppProcessInfoList = activityManager.getRunningAppProcesses();
-//        int idx = 0;
-//        for (ActivityManager.RunningAppProcessInfo process : runningAppProcessInfoList) {
-//            ProcessInfo processInfo = new ProcessInfo(process.pid, process.processName, activityManager.getProcessMemoryInfo(new int[]{process.pid})[0].getTotalPrivateDirty(), 15, true);
-//            onGetProcessInfo(idx, runningAppProcessInfoList.size(), processInfo);
-//            idx++;
-//        }
     }
 
     private void showListItemMenu(final View anchorView, final ProcessInfo processInfo) {
         PopupMenu listItemMenu = new PopupMenu(activity, anchorView);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) listItemMenu.setForceShowIcon(true);
-
         listItemMenu.inflate(R.menu.process_popup_menu);
         listItemMenu.setOnMenuItemClickListener((menuItem) -> {
-    int itemId = menuItem.getItemId();
-    final WinHandler winHandler = activity.getWinHandler();
-    if (itemId == R.id.process_affinity) {
-        showProcessorAffinityDialog(processInfo);
-    } else if (itemId == R.id.bring_to_front) {
-        // Only for Wine processes
-        if (processInfo.wow64Process) {
-            winHandler.bringToFront(processInfo.name);
-            dismiss();
-        } else {
-            Toast.makeText(activity, "Bring to front not supported for Android processes", Toast.LENGTH_SHORT).show();
-        }
-    } else if (itemId == R.id.process_end) {
-        // Handle end process for both Wine and Android
-        if (processInfo.wow64Process) {
-            ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () -> {
-                winHandler.killProcess(processInfo.name);
-            });
-        } else {
-            ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () -> {
-                android.os.Process.killProcess(processInfo.pid);
-                // Optionally, you can also use:
-                // android.os.Process.sendSignal(processInfo.pid, 9);
-            });
-        }
-    }
-    return true;
-});
-        
-        
+            int itemId = menuItem.getItemId();
+            final WinHandler winHandler = activity.getWinHandler();
+            if (itemId == R.id.process_affinity) {
+                showProcessorAffinityDialog(processInfo);
+            } else if (itemId == R.id.bring_to_front) {
+                if (processInfo.wow64Process) {
+                    winHandler.bringToFront(processInfo.name);
+                    dismiss();
+                } else {
+                    Toast.makeText(activity, "Bring to front not supported for Android processes", Toast.LENGTH_SHORT).show();
+                }
+            } else if (itemId == R.id.process_end) {
+                if (processInfo.wow64Process) {
+                    ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () ->
+                        winHandler.killProcess(processInfo.name));
+                } else {
+                    ContentDialog.confirm(activity, R.string.do_you_want_to_end_this_process, () ->
+                        android.os.Process.killProcess(processInfo.pid));
+                }
+            }
+            return true;
+        });
         listItemMenu.show();
     }
 
@@ -153,7 +215,6 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
     public void show() {
         update();
         activity.getWinHandler().setOnGetProcessInfoListener(this);
-
         timer = new Timer();
         timer.schedule(new TimerTask() {
             @Override
@@ -170,28 +231,21 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
             synchronized (lock) {
                 final LinearLayout container = findViewById(R.id.LLProcessList);
                 setBottomBarText(activity.getString(R.string.processes) + ": " + numProcesses);
-
                 if (numProcesses == 0) {
                     container.removeAllViews();
                     findViewById(R.id.TVEmptyText).setVisibility(View.VISIBLE);
                     return;
                 }
-
                 findViewById(R.id.TVEmptyText).setVisibility(View.GONE);
-
                 int childCount = container.getChildCount();
                 View itemView = index < childCount ? container.getChildAt(index) : inflater.inflate(R.layout.process_info_list_item, container, false);
                 ((TextView) itemView.findViewById(R.id.TVName)).setText(processInfo.name + (processInfo.wow64Process ? " *32" : ""));
                 ((TextView) itemView.findViewById(R.id.TVPID)).setText(String.valueOf(processInfo.pid));
                 ((TextView) itemView.findViewById(R.id.TVMemoryUsage)).setText(processInfo.getFormattedMemoryUsage());
                 itemView.findViewById(R.id.BTMenu).setOnClickListener((v) -> showListItemMenu(v, processInfo));
-
                 ImageView ivIcon = itemView.findViewById(R.id.IVIcon);
-                if (ivIcon != null)
-                    ivIcon.setImageResource(R.drawable.taskmgr_process);
-
+                if (ivIcon != null) ivIcon.setImageResource(R.drawable.taskmgr_process);
                 if (index >= childCount) container.addView(itemView);
-
                 if (index == numProcesses - 1 && childCount > numProcesses) {
                     for (int i = childCount - 1; i >= numProcesses; i--) container.removeViewAt(i);
                 }
@@ -205,7 +259,6 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
         short[] clockSpeeds = CPUStatus.getCurrentClockSpeeds();
         int totalClockSpeed = 0;
         short maxClockSpeed = 0;
-
         for (int i = 0; i < clockSpeeds.length; i++) {
             TextView textView = new TextView(activity);
             textView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
@@ -215,7 +268,6 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
             totalClockSpeed += clockSpeeds[i];
             maxClockSpeed = (short) Math.max(maxClockSpeed, clockSpeed);
         }
-
         int avgClockSpeed = totalClockSpeed / clockSpeeds.length;
         TextView tvCPUTitle = findViewById(R.id.TVCPUTitle);
         byte cpuUsagePercent = (byte) (((float) avgClockSpeed / maxClockSpeed) * 100.0f);
@@ -228,10 +280,8 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
         activityManager.getMemoryInfo(memoryInfo);
         long usedMem = memoryInfo.totalMem - memoryInfo.availMem;
         byte memUsagePercent = (byte) (((double) usedMem / memoryInfo.totalMem) * 100.0f);
-
         TextView tvMemoryTitle = findViewById(R.id.TVMemoryTitle);
         tvMemoryTitle.setText(activity.getString(R.string.memory) + " (" + memUsagePercent + "%)");
-
         TextView tvMemoryInfo = findViewById(R.id.TVMemoryInfo);
         tvMemoryInfo.setText(StringUtils.formatBytes(usedMem, false) + "/" + StringUtils.formatBytes(memoryInfo.totalMem));
     }
