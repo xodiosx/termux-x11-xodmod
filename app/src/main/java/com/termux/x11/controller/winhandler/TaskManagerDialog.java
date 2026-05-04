@@ -21,11 +21,15 @@ import com.termux.x11.controller.core.ProcessHelper;
 import com.termux.x11.controller.core.StringUtils;
 import com.termux.x11.controller.widget.CPUListView;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfoListener {
     private final MainActivity activity;
@@ -33,9 +37,10 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
     private Timer timer;
     private final Object lock = new Object();
 
-    // Dynamically set in initEnvironment()
-    private String[] env;
-    private String shellPath;
+    // Dynamic environment – set after async detection
+    private volatile String[] env;
+    private volatile String shellPath;
+    private final CountDownLatch envLatch = new CountDownLatch(1);
 
     public TaskManagerDialog(MainActivity activity) {
         super(activity, R.layout.task_manager_dialog);
@@ -44,18 +49,18 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
         setTitle(R.string.task_manager);
         setIcon(R.drawable.icon_task_manager);
 
-        // Set up the correct environment before building UI
+        // Start environment detection in background
         initEnvironment();
 
         Button cancelButton = findViewById(R.id.BTCancel);
         cancelButton.setText(R.string.new_task);
         cancelButton.setOnClickListener((v) -> {
             dismiss();
-            ContentDialog.prompt(activity, R.string.new_task, "taskmgr.exe", (command) -> {
+            ContentDialog.prompt(activity, R.string.new_task, "CMD", (command) -> {
                 if (command == null || command.trim().isEmpty()) return;
                 String cmd = command.trim();
                 if (cmd.toLowerCase().endsWith(".exe")) {
-                    runNativeCommand("runwine " + cmd);
+                    runNativeCommand("xfex " + cmd);
                 } else {
                     runNativeCommand(cmd);
                 }
@@ -77,47 +82,79 @@ public class TaskManagerDialog extends ContentDialog implements OnGetProcessInfo
     }
 
     /**
-     * Determines the base directory, DISPLAY, and shell path based on
-     * which environment (Termux or Xodos) is accessible.
+     * Detects base directory, shell, and display number asynchronously.
      */
     private void initEnvironment() {
-        String baseDir;
-        String display;
+        new Thread(() -> {
+            try {
+                String baseDir;
+                if (new File("/data/data/com.termux/files").exists()) {
+                    baseDir = "/data/data/com.termux/files";
+                } else {
+                    baseDir = "/data/data/com.xodos/files";
+                }
 
-        // Check which app's data directory exists
-        if (new File("/data/data/com.termux/files").exists()) {
-            baseDir = "/data/data/com.termux/files";
-        } else {
-            baseDir = "/data/data/com.xodos/files";
-        }
+                // Default displays per environment
+                String defaultDisplay = baseDir.contains("com.termux") ? ":0" : ":4";
+                String display = defaultDisplay;
 
-        // DISPLAY: use system variable if set, otherwise default for each environment
-        String systemDisplay = System.getenv("DISPLAY");
-        if (systemDisplay != null && !systemDisplay.isEmpty()) {
-            display = systemDisplay;
-        } else if (baseDir.contains("com.termux")) {
-            display = ":0";
-        } else {
-            display = ":4";
-        }
+                // Try to extract display from termux-x11 process
+                try {
+                    Process ps = Runtime.getRuntime().exec(new String[] { "/system/bin/sh", "-c", "ps -A" });
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(ps.getInputStream()));
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        if (line.contains("termux-x11")) {
+                            // Split on any whitespace
+                            String[] parts = line.split("\\s+");
+                            for (String part : parts) {
+                                if (part.startsWith(":")) {
+                                    // e.g., ":4"
+                                    display = part;
+                                    break;
+                                }
+                            }
+                            if (!display.equals(defaultDisplay)) break;
+                        }
+                    }
+                    reader.close();
+                    ps.destroy();
+                } catch (Exception e) {
+                    // ignore, keep default
+                }
 
-        // Build environment array
-        env = new String[] {
-            "PREFIX=" + baseDir + "/usr",
-            "HOME=" + baseDir + "/home",
-            "TMPDIR=" + baseDir + "/usr/tmp",
-            "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + baseDir + "/usr/bin",
-            "DISPLAY=" + display,
-            "XDG_RUNTIME_DIR=" + baseDir + "/usr/tmp"
-        };
+                // Build environment array
+                env = new String[] {
+                    "PREFIX=" + baseDir + "/usr",
+                    "HOME=" + baseDir + "/home",
+                    "TMPDIR=" + baseDir + "/usr/tmp",
+                    "PATH=/usr/bin:" + baseDir + "/usr/bin",
+                    "DISPLAY=" + display,
+                    "XDG_RUNTIME_DIR=" + baseDir + "/usr/tmp"
+                };
 
-        // Shell path
-        shellPath = baseDir + "/usr/bin/bash";
+                // Shell path
+                shellPath = baseDir + "/usr/bin/bash";
+            } finally {
+                envLatch.countDown();
+            }
+        }).start();
     }
 
+    /**
+     * Waits for environment detection to complete, then runs the command.
+     */
     private void runNativeCommand(String command) {
         new Thread(() -> {
             try {
+                // Wait up to 2 seconds for environment to be ready
+                if (!envLatch.await(2, TimeUnit.SECONDS) || env == null || shellPath == null) {
+                    activity.runOnUiThread(() ->
+                        Toast.makeText(activity, "Environment not ready, please try again", Toast.LENGTH_SHORT).show()
+                    );
+                    return;
+                }
+
                 Process proc = Runtime.getRuntime().exec(
                     new String[] { shellPath, "-c", command },
                     env
