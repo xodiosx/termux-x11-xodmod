@@ -25,9 +25,8 @@ public class Loader {
 
             android.util.Log.i(BuildConfig.logTag, "loading " + targetInfo.applicationInfo.sourceDir + "::" + BuildConfig.CLASS_ID + "::main of " + BuildConfig.APPLICATION_ID + " application (commit " + BuildConfig.COMMIT + ")");
             Class<?> targetClass = Class.forName(cls, true,
-                    Class<?> targetClass = Class.forName(cls, true,
         new dalvik.system.PathClassLoader(targetInfo.applicationInfo.sourceDir,
-                targetInfo.applicationInfo.nativeLibraryDir,   // <-- the fix: native lib path
+                targetInfo.applicationInfo.nativeLibraryDir,
                 ClassLoader.getSystemClassLoader()));
             targetClass.getMethod("main", String[].class).invoke(null, (Object) args);
         } catch (AssertionError e) {
