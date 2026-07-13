@@ -739,7 +739,7 @@ lorieContentView = findViewById(R.id.id_display_window);
   
 // Set up the preferences button to open the drawer with settings
     
-
+startDebugMode();
 
         int modeValue = Integer.parseInt(prefs.touchMode.get()) - 1;
         if (modeValue > 2) {
